@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
 )
 
 func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
@@ -41,7 +43,8 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	configText := string(config)
-	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 5`) || !strings.Contains(configText, `"gitmemo_version": "v0.3.0"`) {
+	versionField := `"gitmemo_version": "` + buildinfo.ReleaseVersion + `"`
+	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 5`) || !strings.Contains(configText, versionField) {
 		t.Fatalf("unexpected config: %s", config)
 	}
 
@@ -50,7 +53,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	lockText := string(lock)
-	if !strings.Contains(lockText, `"lock_version": 1`) || !strings.Contains(lockText, `"gitmemo_version": "v0.3.0"`) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) {
+	if !strings.Contains(lockText, `"lock_version": 1`) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) {
 		t.Fatalf("unexpected trust lock: %s", lock)
 	}
 
@@ -67,7 +70,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflowText := string(workflow)
-	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@v0.3.0") || !strings.Contains(workflowText, "trust version") || !strings.Contains(workflowText, "Stable bootstrap workflow v1") {
+	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@"+buildinfo.BootstrapVerifierVersion) || !strings.Contains(workflowText, "trust version") || !strings.Contains(workflowText, "Stable bootstrap workflow v1") {
 		t.Fatalf("validation workflow is not the stable read-only trust bootstrap: %s", workflow)
 	}
 }
