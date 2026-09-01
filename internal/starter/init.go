@@ -69,10 +69,12 @@ jobs:
         run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@v0.1.0
 
       - name: Check generated indexes
-        run: "$(go env GOPATH)/bin/gitmemo" index --check .
+        run: |
+          "$(go env GOPATH)/bin/gitmemo" index --check .
 
       - name: Validate memory repository
-        run: "$(go env GOPATH)/bin/gitmemo" validate .
+        run: |
+          "$(go env GOPATH)/bin/gitmemo" validate .
 `
 
 type config struct {
