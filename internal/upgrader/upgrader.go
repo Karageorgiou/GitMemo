@@ -25,12 +25,12 @@ type repositoryConfig struct {
 }
 
 type Result struct {
-	FromVersion      string
-	ToVersion        string
-	FromContract     int
-	ToContract       int
-	ChangedPaths     []string
-	AlreadyCurrent   bool
+	FromVersion    string
+	ToVersion      string
+	FromContract   int
+	ToContract     int
+	ChangedPaths   []string
+	AlreadyCurrent bool
 }
 
 type snapshot struct {
@@ -331,7 +331,8 @@ func unique(values []string) []string {
 	for i, value := range values {
 		if i == 0 || value != prev {
 			out = append(out, value)
-			prev = value
+		}
+		prev = value
 	}
 	return out
 }
