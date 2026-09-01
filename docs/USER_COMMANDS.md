@@ -34,7 +34,7 @@ The assistant MUST:
 3. search existing memories before creating anything new;
 4. decide whether the request should create, update, supersede, correct, resolve, or leave an existing memory unchanged;
 5. treat the user's request as an explicit memory request and set `provenance.explicit_memory_request` to `true` on a newly created or materially updated atomic memory when applicable;
-6. regenerate affected indexes when tooling is available;
+6. regenerate affected indexes when tooling is available, or explicitly mark `index/STALE` when the client can write repository files but cannot execute the indexer;
 7. run available repository validation before claiming success;
 8. commit the completed memory change when repository write access is available; and
 9. report what was stored or changed, including the relevant memory ID or IDs and the commit/result actually verified.
@@ -58,13 +58,16 @@ The assistant MUST NOT create, modify, regenerate, commit, resolve, supersede, o
 The assistant SHOULD:
 
 1. locate and read the active private memory repository's operating contract;
-2. begin with the narrowest useful project/current-state view or generated index;
-3. search metadata using the user's terms plus useful aliases, tags, topics, projects, entities, and memory types;
-4. retrieve the smallest set of atomic memories needed to answer the query;
-5. follow relevant correction, supersession, dependency, or conflict edges when necessary; and
-6. clearly distinguish stored memory from any live project or external verification performed in addition to the memory search.
+2. determine whether the generated index is known current; if `index/STALE` exists or freshness is otherwise unknown, treat index results as potentially incomplete;
+3. use the narrowest Index v2 entry point when the index is usable: exact UUID shard for a known memory ID, direct project/topic/tag/type/status index for known metadata, or the deterministic term index / `gitmemo search` for ordinary language;
+4. use repository search and canonical sidecars when index freshness is unknown, stale, missing, or unsupported;
+5. retrieve the smallest set of canonical atomic memories needed to answer the query;
+6. follow relevant correction, supersession, dependency, or conflict edges when necessary; and
+7. clearly distinguish stored memory from any live project or external verification performed in addition to the memory search.
 
-If nothing relevant is stored, say that the GitMemo search found no relevant memory rather than inventing one.
+An index hit is discovery metadata, not sufficient factual evidence by itself. Read the selected canonical memory Markdown/sidecar pair before relying on its substantive content.
+
+If nothing relevant is stored, say that the GitMemo search found no relevant memory rather than inventing one. If the index is not known current, do not claim a complete negative search based only on that index.
 
 Examples:
 
