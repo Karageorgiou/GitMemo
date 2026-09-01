@@ -9,9 +9,24 @@ GitMemo separates **public infrastructure** from **private user memory**:
 
 A memory repository is self-describing: it vendors the operational contract that tells an unfamiliar LLM how to retrieve, interpret, and modify its contents safely, while the GitMemo implementation remains here.
 
-> **AI / LLM OPERATORS working on a memory repository:** read and follow `MEMORY_PROTOCOL.md` before retrieving from or modifying memories.
+> **AI / LLM OPERATORS working on a memory repository:** read and follow `MEMORY_PROTOCOL.md` and `docs/USER_COMMANDS.md` before retrieving from or modifying memories.
 
 See [`docs/REPOSITORY_ROLES.md`](docs/REPOSITORY_ROLES.md) for the infrastructure/data boundary.
+
+## User command convention
+
+GitMemo defines two primary natural-language commands for use with an AI assistant:
+
+```text
+GitMemo: remember ...
+GitMemo: search ...
+```
+
+`GitMemo: remember ...` is an explicit durable memory-write request. The assistant must search before creating, preserve provenance/history, regenerate indexes, validate, and report the verified result.
+
+`GitMemo: search ...` is retrieval-only. It searches the user's private memory repository and must not modify or commit memory merely because a search was requested.
+
+The full command contract, including repository discovery and failure behavior, is in [`docs/USER_COMMANDS.md`](docs/USER_COMMANDS.md).
 
 ## CLI
 
@@ -49,6 +64,7 @@ The CLI embeds and vendors these files into each initialized memory repository:
 - `docs/MEMORY_CONTENT_FORMAT.md`
 - `docs/TAXONOMY.md`
 - `docs/REPOSITORY_VALIDATION.md`
+- `docs/USER_COMMANDS.md`
 - `templates/`
 
 This makes each private memory repository understandable without network access to this repository.
