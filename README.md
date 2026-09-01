@@ -11,20 +11,41 @@ A memory repository is self-describing: it vendors the operational contract that
 
 > **AI / LLM OPERATORS working on a memory repository:** read and follow `MEMORY_PROTOCOL.md` and `docs/USER_COMMANDS.md` before retrieving from or modifying memories.
 
-See [`docs/REPOSITORY_ROLES.md`](docs/REPOSITORY_ROLES.md) for the infrastructure/data boundary.
+## Quick start
+
+Install the first public release:
+
+```bash
+go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@v0.1.0
+```
+
+Create your own private memory repository:
+
+```bash
+mkdir GitMemo-memory
+cd GitMemo-memory
+git init
+gitmemo init .
+```
+
+Then commit it and push it to a **private** Git repository that your AI assistant can access.
+
+The complete end-to-end setup, including GitHub CLI commands, is in [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
 
 ## User command convention
 
 GitMemo defines two primary natural-language commands for use with an AI assistant:
 
 ```text
-GitMemo: remember ...
+GitMemo: store ...
 GitMemo: search ...
 ```
 
-`GitMemo: remember ...` is an explicit durable memory-write request. The assistant must search before creating, preserve provenance/history, regenerate indexes, validate, and report the verified result.
+`GitMemo: store ...` is an explicit durable memory-write request. The assistant must search before creating, preserve provenance/history, regenerate indexes, validate, and report the verified result.
 
 `GitMemo: search ...` is retrieval-only. It searches the user's private memory repository and must not modify or commit memory merely because a search was requested.
+
+`remember` is intentionally not the canonical write command because it can mean either storing or recalling information.
 
 The full command contract, including repository discovery and failure behavior, is in [`docs/USER_COMMANDS.md`](docs/USER_COMMANDS.md).
 
@@ -38,21 +59,18 @@ go vet ./...
 go build -o gitmemo ./cmd/gitmemo
 ```
 
-Create a private memory-repository skeleton:
+Commands:
 
 ```bash
-./gitmemo init ./my-memory
+gitmemo init ./my-memory
+gitmemo validate ./my-memory
+gitmemo index --check ./my-memory
+gitmemo index --write ./my-memory
 ```
 
-Then validate or rebuild its generated indexes:
+`gitmemo init` refuses to overwrite a non-empty target. It may initialize a freshly created Git repository whose only existing entry is `.git`.
 
-```bash
-./gitmemo validate ./my-memory
-./gitmemo index --check ./my-memory
-./gitmemo index --write ./my-memory
-```
-
-`gitmemo init` refuses to overwrite a non-empty target. It may also initialize a freshly created Git repository whose only existing entry is `.git`.
+New memory repositories include a GitHub Actions validation workflow pinned to the public GitMemo v0.1.0 release.
 
 ## Operational contract
 
@@ -69,10 +87,18 @@ The CLI embeds and vendors these files into each initialized memory repository:
 
 This makes each private memory repository understandable without network access to this repository.
 
+See [`docs/REPOSITORY_ROLES.md`](docs/REPOSITORY_ROLES.md) for the infrastructure/data boundary.
+
 ## Privacy model
 
 GitMemo does not require a server. The CLI runs where the memory repository already exists. User memories do not need to be uploaded to a GitMemo service.
 
+A memory repository should normally be private. GitMemo is not a secrets vault; authentication secrets must not be stored as memories.
+
+## License
+
+GitMemo is released under the [MIT License](LICENSE).
+
 ## Status
 
-GitMemo is currently pre-1.0. Repository format and release/versioning workflows are still being hardened before the first public release.
+GitMemo v0.1.0 is the first public preview. The V1 repository/schema format remains intentionally conservative while real-world usage is evaluated.
