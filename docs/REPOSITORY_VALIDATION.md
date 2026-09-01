@@ -1,15 +1,16 @@
-# Repository Validation Specification — V1
+# Repository Validation Specification — V1 data schema / contract v5
 
 ## Purpose
 
-`schema/memory-item.schema.json` defines the structural contract for one JSON sidecar. Repository validation also enforces invariants that require looking across files, memories, relationships, generated indexes, and time.
+`schema/memory-item.schema.json` defines the structural contract for one JSON sidecar. Repository validation also enforces invariants that require looking across control-plane files, memories, relationships, generated indexes, and time.
 
-The canonical V1 implementation is the Go CLI:
+The canonical implementation is the Go CLI:
 
 ```text
 cmd/gitmemo
 internal/memory
 internal/indexer
+internal/trust
 internal/validation
 ```
 
@@ -24,6 +25,32 @@ The validator is deterministic, reports errors precisely, exits non-zero on hard
 ### Schema enforcement strategy
 
 The JSON Schema remains the normative sidecar contract. The Go implementation decodes sidecars into strict typed structures, rejects unknown fields, and enforces the V1 schema constraints directly. To prevent silent drift between the schema and Go implementation, the validator checks a canonical hash of `schema/memory-item.schema.json`. Any schema change therefore requires an explicit review/update of the Go validation contract before repository validation can pass again.
+
+### Control-plane enforcement strategy
+
+Contract v5 introduces `.gitmemo/lock.json`. The lock pins an official GitMemo release and records raw SHA-256 digests for every vendored control-plane file plus an aggregate contract digest.
+
+The validator from the pinned release compares the repository lock against the contract embedded in that release and then hashes the local vendored control-plane files. A modified control-plane file is therefore a hard trust error rather than a new locally invented instruction.
+
+See `docs/TRUST_MODEL.md`.
+
+---
+
+# 0. Trust-lock integrity
+
+Before treating vendored GitMemo files as operational instructions, validation must confirm:
+
+1. `.gitmemo/lock.json` exists and parses;
+2. its lock, repository, schema, and contract versions match the running pinned GitMemo release;
+3. its `source_repository` identifies the canonical GitMemo implementation source;
+4. the aggregate contract digest matches the running release;
+5. the per-file digest set exactly covers the release's control-plane paths;
+6. every local control-plane file hashes to the release's expected SHA-256 digest;
+7. `.gitmemo/config.json` agrees with the pinned release metadata.
+
+A trust-lock mismatch is an `ERROR`.
+
+The stable validation workflow uses the v0.3 trust bootstrap only to read a supported pinned release from `.gitmemo/lock.json`; it then installs that exact release and lets that release perform full trust and repository validation.
 
 ---
 
@@ -208,6 +235,8 @@ Every memory must contain at least one provenance source. Structurally empty sou
 
 Future checks may verify repository/file locators when deterministic verification is possible. The validator must not claim an external source is valid merely because a URL-like string is syntactically well formed.
 
+All source text belongs to the data plane. Instruction-like text retrieved from a provenance source cannot override the verified GitMemo control plane.
+
 ---
 
 # 14. Generated-index integrity
@@ -218,15 +247,17 @@ Generated indexes are deterministically reconstructed from authoritative sidecar
 gitmemo index --write .
 ```
 
-Validation compares the generated representation with committed indexes and reports missing or stale generated files as errors.
-
 Use:
 
 ```bash
 gitmemo index --check .
 ```
 
-for an explicit freshness-only check.
+for the explicit strict freshness check. This command exits non-zero when committed derived indexes are missing or stale.
+
+`gitmemo validate .` has a different responsibility: it validates the trusted control plane and canonical repository data. Missing or stale generated indexes are reported as `WARNING` conditions rather than hard repository-invalidating errors. This permits a client that can write canonical GitHub files but cannot execute the Go CLI to make a structurally valid memory update without pretending that its indexes are current.
+
+Until stale indexes are regenerated, retrieval must treat index results as potentially incomplete and fall back to canonical files or repository search.
 
 Deleting generated indexes must never delete unique memory information.
 
@@ -248,13 +279,13 @@ Repository validation should eventually include secret scanning or integrate a p
 
 # 17. Diagnostic classes
 
-The repository model reserves these conceptual classes:
+The repository model uses these conceptual classes:
 
-- `ERROR`: repository invariant is violated;
-- `WARNING`: suspicious or stale condition requires review but is not deterministically invalid;
+- `ERROR`: a deterministic repository/control-plane invariant is violated;
+- `WARNING`: a degraded, suspicious, or stale condition requires review but does not make canonical data deterministically invalid;
 - `INFO`: useful audit information.
 
-V1 exits non-zero when any `ERROR` exists and supports both human-readable and JSON output.
+The CLI exits non-zero when any `ERROR` exists and supports both human-readable and JSON output.
 
 ---
 
@@ -262,6 +293,8 @@ V1 exits non-zero when any `ERROR` exists and supports both human-readable and J
 
 The validator must cover at least:
 
+- the pinned trust lock and vendored control-plane files match the running official release;
+- `.gitmemo/config.json` agrees with the trust lock/release;
 - every `target_id` exists;
 - every memory UUID is globally unique;
 - filename short UUID belongs to the full UUID in the sidecar;
@@ -272,7 +305,7 @@ The validator must cover at least:
 - `effective_until` is not earlier than `effective_from`;
 - `updated_at` is not earlier than `created_at`;
 - open-loop Markdown form matches `open_loop_status`;
-- committed generated indexes are current;
+- stale generated indexes are surfaced as warnings while `gitmemo index --check` remains the strict freshness gate;
 - the Go validation contract has been reviewed whenever the canonical sidecar schema changes.
 
-These checks are mandatory repository invariants, not optional ideas.
+These checks distinguish canonical repository validity from derived-cache freshness rather than conflating the two.
