@@ -1,0 +1,108 @@
+name: Patch Index v2 Once
+
+on:
+  push:
+    branches:
+      - feat/index-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Apply deterministic Index v2 patches
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('internal/indexer/indexer.go')
+          s = p.read_text()
+          old = 'sort.Slice(records, func(i, j int) bool { return records[i].Memory.ID < records[j].Memory.ID })'
+          new = '''sort.SliceStable(records, func(i, j int) bool {
+          \t\tif records[i].Memory.ID != records[j].Memory.ID {
+          \t\t\treturn records[i].Memory.ID < records[j].Memory.ID
+          \t\t}
+          \t\treturn records[i].Path < records[j].Path
+          \t})'''
+          if old not in s:
+              raise SystemExit('indexer sort pattern not found')
+          p.write_text(s.replace(old, new))
+
+          p = Path('internal/indexer/machine.go')
+          s = p.read_text()
+          s = s.replace('const termShardPrefixRunes = 2\n', 'const termShardHashHexCharacters = 3\n')
+          s = s.replace('\tTermShardPrefixRunes     int           `json:"term_shard_prefix_runes"`\n', '\tTermShardHashHexCharacters int        `json:"term_shard_hash_hex_characters"`\n')
+          s = s.replace('\tseenIDs := map[string]bool{}\n', '')
+          dup = '''\t\tif seenIDs[m.ID] {
+          \t\t\treturn nil, fmt.Errorf("cannot generate index with duplicate memory UUID %s", m.ID)
+          \t\t}
+          \t\tseenIDs[m.ID] = true
+
+          '''
+          if dup not in s:
+              raise SystemExit('duplicate-ID rejection block not found')
+          s = s.replace(dup, '')
+          s = s.replace('\t\tTermShardPrefixRunes:    termShardPrefixRunes,\n', '\t\tTermShardHashHexCharacters: termShardHashHexCharacters,\n')
+          s = s.replace('"index/terms/<first-2-normalized-term-runes>.json"', '"index/terms/<sha256-term-prefix>.json"')
+          old_bucket = '''func termBucket(term string) string {
+          \trunes := []rune(term)
+          \tif len(runes) <= termShardPrefixRunes {
+          \t\treturn term
+          \t}
+          \treturn string(runes[:termShardPrefixRunes])
+          }'''
+          new_bucket = '''func termBucket(term string) string {
+          \tsum := sha256.Sum256([]byte(term))
+          \thexsum := hex.EncodeToString(sum[:])
+          \treturn hexsum[:termShardHashHexCharacters]
+          }'''
+          if old_bucket not in s:
+              raise SystemExit('termBucket pattern not found')
+          s = s.replace(old_bucket, new_bucket)
+          p.write_text(s)
+
+          p = Path('internal/indexer/indexer_test.go')
+          s = p.read_text()
+          s = s.replace('func TestUnicodeTermsUseReadableShardPrefix(t *testing.T) {', 'func TestUnicodeTermsUseHashShard(t *testing.T) {')
+          old = '''\tif _, ok := r.Files["index/terms/αθ.json"]; !ok {
+          \t\tt.Fatalf("expected readable Unicode term shard, got generated paths: %v", mapKeys(r.Files))
+          \t}'''
+          new = '''\tbucket := termBucket("αθήνα")
+          \tif _, ok := r.Files["index/terms/"+bucket+".json"]; !ok {
+          \t\tt.Fatalf("expected Unicode term in deterministic hash shard %s, got generated paths: %v", bucket, mapKeys(r.Files))
+          \t}'''
+          if old not in s:
+              raise SystemExit('unicode term test pattern not found')
+          p.write_text(s.replace(old, new))
+
+          p = Path('internal/starter/init_test.go')
+          s = p.read_text()
+          s = s.replace('\t"path/filepath"\n', '\t"path/filepath"\n\t"strconv"\n')
+          s = s.replace('\t\t"index/memories.jsonl",\n', '\t\t"index/catalog.json",\n')
+          old = 'if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 5`) || !strings.Contains(configText, versionField) {'
+          new = 'if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) {'
+          if old not in s:
+              raise SystemExit('starter contract assertion pattern not found')
+          p.write_text(s.replace(old, new))
+          PY
+
+          gofmt -w internal/indexer/indexer.go internal/indexer/machine.go internal/indexer/indexer_test.go internal/starter/init_test.go
+
+      - name: Commit patches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/indexer internal/starter/init_test.go
+          if git diff --cached --quiet; then
+            echo "No patch changes."
+          else
+            git commit -m "fix: complete deterministic Index v2 migration"
+            git push
+          fi
