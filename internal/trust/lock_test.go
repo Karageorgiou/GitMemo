@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	gitmemo "github.com/Karageorgiou/GitMemo"
+	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
 )
 
 func TestExpectedLockCoversContractPaths(t *testing.T) {
@@ -13,7 +14,7 @@ func TestExpectedLockCoversContractPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lock.GitMemoVersion != "v0.3.0" || lock.ContractVersion != 5 || lock.LockVersion != 1 {
+	if lock.GitMemoVersion != buildinfo.ReleaseVersion || lock.ContractVersion != buildinfo.ContractVersion || lock.LockVersion != buildinfo.TrustLockVersion {
 		t.Fatalf("unexpected lock metadata: %#v", lock)
 	}
 	if len(lock.FilesSHA256) != len(gitmemo.ContractPaths()) {
