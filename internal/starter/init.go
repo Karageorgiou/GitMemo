@@ -13,7 +13,7 @@ import (
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
 )
 
-const contractVersion = 2
+const contractVersion = 3
 
 const memoryRepoReadme = `# GitMemo Memory
 
@@ -25,13 +25,13 @@ This repository contains memory data and a pinned operational contract. The GitM
 
 ## Quick commands
 
-- ` + "`GitMemo: remember ...`" + ` — explicit durable memory write.
+- ` + "`GitMemo: store ...`" + ` — explicit durable memory write.
 - ` + "`GitMemo: search ...`" + ` — retrieval-only search; do not modify memories.
 
 ## Repository contents
 
 - ` + "`MEMORY_PROTOCOL.md`" + ` — mandatory operating instructions.
-- ` + "`docs/USER_COMMANDS.md`" + ` — user-facing remember/search command contract.
+- ` + "`docs/USER_COMMANDS.md`" + ` — user-facing store/search command contract.
 - ` + "`schema/`" + ` — machine-readable memory schema.
 - ` + "`docs/`" + ` — memory format, taxonomy, and validation contract.
 - ` + "`templates/`" + ` — authoring scaffolds for the eight memory types.
@@ -39,8 +39,42 @@ This repository contains memory data and a pinned operational contract. The GitM
 - ` + "`projects/`" + ` — current-state views for active projects.
 - ` + "`index/`" + ` — generated discovery indexes.
 - ` + "`.gitmemo/config.json`" + ` — repository-format metadata.
+- ` + "`.github/workflows/validate.yml`" + ` — read-only validation CI pinned to GitMemo v0.1.0.
 
 Do not store credentials, authentication secrets, private keys, recovery codes, or other secret material in this repository.
+`
+
+const memoryValidationWorkflow = `name: Validate GitMemo Memory
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out memory repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.0'
+
+      - name: Install pinned GitMemo CLI
+        run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@v0.1.0
+
+      - name: Check generated indexes
+        run: |
+          "$(go env GOPATH)/bin/gitmemo" index --check .
+
+      - name: Validate memory repository
+        run: |
+          "$(go env GOPATH)/bin/gitmemo" validate .
 `
 
 type config struct {
@@ -74,6 +108,9 @@ func Init(root string) error {
 	}
 
 	if err := writeNew(root, "README.md", []byte(memoryRepoReadme)); err != nil {
+		return err
+	}
+	if err := writeNew(root, ".github/workflows/validate.yml", []byte(memoryValidationWorkflow)); err != nil {
 		return err
 	}
 	cfg, err := json.MarshalIndent(config{RepositoryFormat: 1, SchemaVersion: 1, ContractVersion: contractVersion}, "", "  ")
