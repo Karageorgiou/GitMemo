@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,8 +37,29 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md"} {
+	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md", "docs/INDEX_FORMAT.md"} {
 		if err := os.Remove(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Recreate the generated-index shape used by early GitMemo releases so the
+	// upgrade test proves obsolete v1 files are removed rather than merely
+	// upgrading a repository that was initialized by the current binary.
+	indexDir := filepath.Join(root, "index")
+	if err := os.RemoveAll(indexDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(indexDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range map[string]string{
+		"memories.jsonl": "",
+		"projects.md":    "# Projects\n",
+		"open-loops.md":  "# Open Loops\n",
+		"preferences.md": "# Preferences\n",
+	} {
+		if err := os.WriteFile(filepath.Join(indexDir, rel), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -75,7 +97,8 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 		t.Fatal(err)
 	}
 	versionField := `"gitmemo_version": "` + buildinfo.ReleaseVersion + `"`
-	if !strings.Contains(string(config), `"contract_version": 5`) || !strings.Contains(string(config), versionField) {
+	contractField := `"contract_version": ` + strconv.Itoa(buildinfo.ContractVersion)
+	if !strings.Contains(string(config), contractField) || !strings.Contains(string(config), versionField) {
 		t.Fatalf("config not upgraded: %s", config)
 	}
 
@@ -83,8 +106,8 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(lock), versionField) || !strings.Contains(string(lock), `"contract_sha256"`) {
-		t.Fatalf("trust lock not installed: %s", lock)
+	if !strings.Contains(string(lock), versionField) || !strings.Contains(string(lock), `"contract_sha256"`) || !strings.Contains(string(lock), `"docs/INDEX_FORMAT.md"`) {
+		t.Fatalf("trust lock not installed with Index v2 contract: %s", lock)
 	}
 
 	workflow, err := os.ReadFile(workflowPath)
@@ -94,10 +117,16 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if !strings.Contains(string(workflow), "Stable bootstrap workflow v1") || !strings.Contains(string(workflow), "trust version") || !strings.Contains(string(workflow), "@"+buildinfo.BootstrapVerifierVersion) {
 		t.Fatalf("workflow not upgraded to stable bootstrap: %s", workflow)
 	}
-	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md"} {
+	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md", "docs/INDEX_FORMAT.md"} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("contract file %s not installed: %v", rel, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(indexDir, "memories.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("legacy monolithic machine index survived upgrade: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(indexDir, "catalog.json")); err != nil {
+		t.Fatalf("Index v2 catalog not generated: %v", err)
 	}
 }
 
