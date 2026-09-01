@@ -8,10 +8,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
 	"github.com/Karageorgiou/GitMemo/internal/memory"
 )
 
-const IndexVersion = 2
+const IndexVersion = buildinfo.IndexFormatVersion
 
 const StaleMarkerPath = "index/STALE"
 

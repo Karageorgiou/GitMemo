@@ -1,4 +1,4 @@
-# Repository Validation Specification — V1 data schema / contract v5
+# Repository Validation Specification — V1 data schema / contract v6
 
 ## Purpose
 
@@ -28,7 +28,7 @@ The JSON Schema remains the normative sidecar contract. The Go implementation de
 
 ### Control-plane enforcement strategy
 
-Contract v5 introduces `.gitmemo/lock.json`. The lock pins an official GitMemo release and records raw SHA-256 digests for every vendored control-plane file plus an aggregate contract digest.
+The release-bound trust model uses `.gitmemo/lock.json`. The lock pins an official GitMemo release and records raw SHA-256 digests for every vendored control-plane file plus an aggregate contract digest.
 
 The validator from the pinned release compares the repository lock against the contract embedded in that release and then hashes the local vendored control-plane files. A modified control-plane file is therefore a hard trust error rather than a new locally invented instruction.
 
@@ -247,17 +247,19 @@ Generated indexes are deterministically reconstructed from authoritative sidecar
 gitmemo index --write .
 ```
 
+Index v2 is specified in `docs/INDEX_FORMAT.md`. The validator/index checker expects the complete deterministic generated tree for the pinned release, including `index/catalog.json`, applicable UUID/metadata/term shards, and the human navigation indexes. Obsolete generated files from older index formats are not silently accepted as current.
+
 Use:
 
 ```bash
 gitmemo index --check .
 ```
 
-for the explicit strict freshness check. This command exits non-zero when committed derived indexes are missing or stale.
+for the explicit strict freshness check. This command exits non-zero when expected derived files are missing or changed, unexpected/obsolete generated files remain, or `index/STALE` is present.
 
 `gitmemo validate .` has a different responsibility: it validates the trusted control plane and canonical repository data. Missing or stale generated indexes are reported as `WARNING` conditions rather than hard repository-invalidating errors. This permits a client that can write canonical GitHub files but cannot execute the Go CLI to make a structurally valid memory update without pretending that its indexes are current.
 
-Until stale indexes are regenerated, retrieval must treat index results as potentially incomplete and fall back to canonical files or repository search.
+A write-capable client that cannot regenerate indexes SHOULD create or preserve `index/STALE`. Until stale indexes are regenerated, retrieval must treat index results as potentially incomplete and fall back to canonical files or repository search.
 
 Deleting generated indexes must never delete unique memory information.
 
