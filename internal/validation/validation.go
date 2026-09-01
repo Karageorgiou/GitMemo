@@ -12,6 +12,7 @@ import (
 
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
 	"github.com/Karageorgiou/GitMemo/internal/memory"
+	"github.com/Karageorgiou/GitMemo/internal/trust"
 )
 
 type Issue struct {
@@ -35,6 +36,13 @@ func Validate(root string) []Issue {
 	var issues []Issue
 	add := func(code, path, message string) {
 		issues = append(issues, Issue{Severity: "ERROR", Code: code, Path: rel(root, path), Message: message})
+	}
+	warn := func(code, path, message string) {
+		issues = append(issues, Issue{Severity: "WARNING", Code: code, Path: rel(root, path), Message: message})
+	}
+
+	for _, problem := range trust.Check(root) {
+		add("TRUST_LOCK", filepath.Join(root, filepath.FromSlash(problem.Path)), problem.Message)
 	}
 
 	if err := memory.ValidateSchemaContract(root); err != nil {
@@ -133,7 +141,7 @@ func Validate(root string) []Issue {
 			add("INDEX_CHECK", filepath.Join(root, "index"), idxErr.Error())
 		} else {
 			for _, p := range stale {
-				add("INDEX_STALE", filepath.Join(root, filepath.FromSlash(p)), "generated index is missing or stale")
+				warn("INDEX_STALE", filepath.Join(root, filepath.FromSlash(p)), "generated index is missing or stale; canonical memories/projects remain authoritative and the index may be regenerated")
 			}
 		}
 	}
@@ -348,6 +356,7 @@ func RenderText(issues []Issue) string {
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
+
 func HasErrors(issues []Issue) bool {
 	for _, i := range issues {
 		if i.Severity == "ERROR" {
@@ -356,6 +365,7 @@ func HasErrors(issues []Issue) bool {
 	}
 	return false
 }
+
 func sortIssues(issues []Issue) []Issue {
 	sort.Slice(issues, func(i, j int) bool {
 		if issues[i].Severity != issues[j].Severity {
@@ -371,6 +381,7 @@ func sortIssues(issues []Issue) []Issue {
 	})
 	return issues
 }
+
 func rel(root, path string) string {
 	r, err := filepath.Rel(root, path)
 	if err != nil {
@@ -378,4 +389,8 @@ func rel(root, path string) string {
 	}
 	return filepath.ToSlash(r)
 }
-func clean(path string) string { p, _ := filepath.Abs(path); return filepath.Clean(p) }
+
+func clean(path string) string {
+	p, _ := filepath.Abs(path)
+	return filepath.Clean(p)
+}
