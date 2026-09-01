@@ -1,0 +1,41 @@
+name: Validate GitMemo
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Build GitMemo CLI
+        run: go build -o bin/gitmemo ./cmd/gitmemo
+
+      - name: Initialize clean memory repository
+        run: |
+          rm -rf "$RUNNER_TEMP/gitmemo-memory"
+          ./bin/gitmemo init "$RUNNER_TEMP/gitmemo-memory"
+
+      - name: Check generated memory indexes
+        run: ./bin/gitmemo index --check "$RUNNER_TEMP/gitmemo-memory"
+
+      - name: Validate generated memory repository
+        run: ./bin/gitmemo validate "$RUNNER_TEMP/gitmemo-memory"

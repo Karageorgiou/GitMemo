@@ -1,0 +1,67 @@
+package starter
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "memory")
+	if err := Init(root); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{
+		"README.md",
+		"MEMORY_PROTOCOL.md",
+		"schema/memory-item.schema.json",
+		"templates/open_loop.md",
+		".gitmemo/config.json",
+		"memories/.gitkeep",
+		"projects/.gitkeep",
+		"index/memories.jsonl",
+		"index/projects.md",
+		"index/open-loops.md",
+		"index/preferences.md",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("missing %s: %v", rel, err)
+		}
+	}
+
+	config, err := os.ReadFile(filepath.Join(root, ".gitmemo", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(config), `"repository_format": 1`) || !strings.Contains(string(config), `"contract_version": 1`) {
+		t.Fatalf("unexpected config: %s", config)
+	}
+}
+
+func TestInitAllowsFreshGitRepository(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Init(root); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitRefusesNonEmptyDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "keep.txt"), []byte("do not replace"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Init(root); err == nil {
+		t.Fatal("expected init to refuse a non-empty target")
+	}
+	data, err := os.ReadFile(filepath.Join(root, "keep.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "do not replace" {
+		t.Fatal("existing file was modified")
+	}
+}
