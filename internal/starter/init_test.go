@@ -15,6 +15,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	for _, rel := range []string{
 		"README.md",
 		"MEMORY_PROTOCOL.md",
+		"docs/USER_COMMANDS.md",
 		"schema/memory-item.schema.json",
 		"templates/open_loop.md",
 		".gitmemo/config.json",
@@ -34,8 +35,16 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(config), `"repository_format": 1`) || !strings.Contains(string(config), `"contract_version": 1`) {
+	if !strings.Contains(string(config), `"repository_format": 1`) || !strings.Contains(string(config), `"contract_version": 2`) {
 		t.Fatalf("unexpected config: %s", config)
+	}
+
+	commands, err := os.ReadFile(filepath.Join(root, "docs", "USER_COMMANDS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(commands), "GitMemo: remember") || !strings.Contains(string(commands), "GitMemo: search") {
+		t.Fatalf("command contract missing remember/search interface: %s", commands)
 	}
 }
 
