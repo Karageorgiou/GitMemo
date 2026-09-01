@@ -258,6 +258,7 @@ func validateRequired(root map[string]json.RawMessage) []SchemaProblem {
 						require(item, fmt.Sprintf("provenance.sources[%d].", i), "kind", "locator", "revision", "note")
 					}
 				}
+			}
 		}
 	}
 	if raw, ok := root["relationships"]; ok && string(bytes.TrimSpace(raw)) != "null" {
