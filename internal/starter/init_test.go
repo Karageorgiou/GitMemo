@@ -16,6 +16,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		"README.md",
 		"MEMORY_PROTOCOL.md",
 		"docs/USER_COMMANDS.md",
+		"docs/EXTENDING_GITMEMO.md",
 		"schema/memory-item.schema.json",
 		"templates/open_loop.md",
 		".gitmemo/config.json",
@@ -36,7 +37,8 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(config), `"repository_format": 1`) || !strings.Contains(string(config), `"contract_version": 3`) {
+	configText := string(config)
+	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 4`) || !strings.Contains(configText, `"gitmemo_version": "v0.2.0"`) {
 		t.Fatalf("unexpected config: %s", config)
 	}
 
@@ -53,8 +55,8 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflowText := string(workflow)
-	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@v0.1.0") {
-		t.Fatalf("validation workflow is not read-only and release-pinned: %s", workflow)
+	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@v0.2.0") || !strings.Contains(workflowText, "# Managed by GitMemo.") {
+		t.Fatalf("validation workflow is not read-only, managed, and release-pinned: %s", workflow)
 	}
 }
 

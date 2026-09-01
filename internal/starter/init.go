@@ -8,14 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	gitmemo "github.com/Karageorgiou/GitMemo"
+	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
 )
 
-const contractVersion = 3
-
-const memoryRepoReadme = `# GitMemo Memory
+const memoryRepoReadmeTemplate = `# GitMemo Memory
 
 Private, user-owned persistent memory for AI assistants.
 
@@ -32,19 +32,21 @@ This repository contains memory data and a pinned operational contract. The GitM
 
 - ` + "`MEMORY_PROTOCOL.md`" + ` — mandatory operating instructions.
 - ` + "`docs/USER_COMMANDS.md`" + ` — user-facing store/search command contract.
+- ` + "`docs/EXTENDING_GITMEMO.md`" + ` — rules for flexible categories versus core schema changes.
 - ` + "`schema/`" + ` — machine-readable memory schema.
 - ` + "`docs/`" + ` — memory format, taxonomy, and validation contract.
-- ` + "`templates/`" + ` — authoring scaffolds for the eight memory types.
-- ` + "`memories/`" + ` — atomic Markdown + JSON memory pairs.
-- ` + "`projects/`" + ` — current-state views for active projects.
+- ` + "`templates/`" + ` — authoring scaffolds for the eight core memory types.
+- ` + "`memories/`" + ` — atomic durable memories.
+- ` + "`projects/`" + ` — concise project state views.
 - ` + "`index/`" + ` — generated discovery indexes.
-- ` + "`.gitmemo/config.json`" + ` — repository-format metadata.
-- ` + "`.github/workflows/validate.yml`" + ` — read-only validation CI pinned to GitMemo v0.1.0.
+- ` + "`.gitmemo/config.json`" + ` — repository, schema, contract, and tooling version metadata.
+- ` + "`.github/workflows/validate.yml`" + ` — read-only validation CI pinned to GitMemo {{VERSION}}.
 
 Do not store credentials, authentication secrets, private keys, recovery codes, or other secret material in this repository.
 `
 
-const memoryValidationWorkflow = `name: Validate GitMemo Memory
+const memoryValidationWorkflowTemplate = `# Managed by GitMemo. Updated by gitmemo upgrade.
+name: Validate GitMemo Memory
 
 on:
   push:
@@ -66,7 +68,7 @@ jobs:
           go-version: '1.27.0'
 
       - name: Install pinned GitMemo CLI
-        run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@v0.1.0
+        run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@{{VERSION}}
 
       - name: Check generated indexes
         run: |
@@ -77,10 +79,32 @@ jobs:
           "$(go env GOPATH)/bin/gitmemo" validate .
 `
 
-type config struct {
-	RepositoryFormat int `json:"repository_format"`
-	SchemaVersion    int `json:"schema_version"`
-	ContractVersion  int `json:"contract_version"`
+type Config struct {
+	RepositoryFormat int    `json:"repository_format"`
+	SchemaVersion    int    `json:"schema_version"`
+	ContractVersion  int    `json:"contract_version"`
+	GitMemoVersion   string `json:"gitmemo_version"`
+}
+
+func MemoryRepoReadme() []byte {
+	return []byte(strings.ReplaceAll(memoryRepoReadmeTemplate, "{{VERSION}}", buildinfo.ReleaseVersion))
+}
+
+func ValidationWorkflow() []byte {
+	return []byte(strings.ReplaceAll(memoryValidationWorkflowTemplate, "{{VERSION}}", buildinfo.ReleaseVersion))
+}
+
+func ConfigJSON() ([]byte, error) {
+	data, err := json.MarshalIndent(Config{
+		RepositoryFormat: buildinfo.RepositoryFormatVersion,
+		SchemaVersion:    buildinfo.SchemaVersion,
+		ContractVersion:  buildinfo.ContractVersion,
+		GitMemoVersion:   buildinfo.ReleaseVersion,
+	}, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
 }
 
 // Init creates a new GitMemo memory repository skeleton at root. The target
@@ -107,17 +131,16 @@ func Init(root string) error {
 		}
 	}
 
-	if err := writeNew(root, "README.md", []byte(memoryRepoReadme)); err != nil {
+	if err := writeNew(root, "README.md", MemoryRepoReadme()); err != nil {
 		return err
 	}
-	if err := writeNew(root, ".github/workflows/validate.yml", []byte(memoryValidationWorkflow)); err != nil {
+	if err := writeNew(root, ".github/workflows/validate.yml", ValidationWorkflow()); err != nil {
 		return err
 	}
-	cfg, err := json.MarshalIndent(config{RepositoryFormat: 1, SchemaVersion: 1, ContractVersion: contractVersion}, "", "  ")
+	cfg, err := ConfigJSON()
 	if err != nil {
 		return err
 	}
-	cfg = append(cfg, '\n')
 	if err := writeNew(root, ".gitmemo/config.json", cfg); err != nil {
 		return err
 	}
