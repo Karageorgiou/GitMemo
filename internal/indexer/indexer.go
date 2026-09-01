@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,12 +11,17 @@ import (
 	"github.com/Karageorgiou/GitMemo/internal/memory"
 )
 
-var IndexPaths = []string{
-	"index/memories.jsonl",
+const IndexVersion = 2
+
+const StaleMarkerPath = "index/STALE"
+
+var HumanIndexPaths = []string{
 	"index/projects.md",
 	"index/open-loops.md",
 	"index/preferences.md",
 }
+
+const staleMarkerText = "GitMemo generated indexes are stale.\nCanonical memories and project files remain authoritative.\nRegenerate with: gitmemo index --write .\n"
 
 type indexRelationship struct {
 	Type     string `json:"type"`
@@ -57,12 +61,10 @@ func Generate(root string) (Result, error) {
 	}
 	sort.Slice(records, func(i, j int) bool { return records[i].Memory.ID < records[j].Memory.ID })
 
-	files := map[string][]byte{}
-	memories, err := renderMemoriesJSONL(records)
+	files, err := renderMachineIndexes(root, records)
 	if err != nil {
 		return Result{}, err
 	}
-	files["index/memories.jsonl"] = memories
 	files["index/projects.md"] = renderProjects(root)
 	files["index/open-loops.md"] = renderOpenLoops(root, records)
 	files["index/preferences.md"] = renderPreferences(root, records)
@@ -74,17 +76,7 @@ func Write(root string) error {
 	if err != nil {
 		return err
 	}
-	for _, rel := range IndexPaths {
-		data := result.Files[rel]
-		path := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
+	return replaceIndexDirectory(root, result)
 }
 
 func Check(root string) ([]string, error) {
@@ -92,40 +84,146 @@ func Check(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var stale []string
-	for _, rel := range IndexPaths {
-		expected := result.Files[rel]
+	actualPaths, err := ExistingPaths(root)
+	if err != nil {
+		return nil, err
+	}
+
+	actualSet := make(map[string]bool, len(actualPaths))
+	for _, rel := range actualPaths {
+		actualSet[rel] = true
+	}
+
+	stale := make([]string, 0)
+	for rel, expected := range result.Files {
 		actual, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 		if readErr != nil || !bytes.Equal(actual, expected) {
 			stale = append(stale, rel)
 		}
+		delete(actualSet, rel)
 	}
-	return stale, nil
+	for rel := range actualSet {
+		stale = append(stale, rel)
+	}
+	sort.Strings(stale)
+	return uniqueStrings(stale), nil
 }
 
-func renderMemoriesJSONL(records []memory.Record) ([]byte, error) {
-	var out bytes.Buffer
-	enc := json.NewEncoder(&out)
-	enc.SetEscapeHTML(false)
-	for _, record := range records {
-		m := record.Memory
-		relationships := make([]indexRelationship, 0, len(m.Relationships))
-		for _, r := range m.Relationships {
-			relationships = append(relationships, indexRelationship{Type: r.Type, TargetID: r.TargetID})
+func ExistingPaths(root string) ([]string, error) {
+	base := filepath.Join(root, "index")
+	if _, err := os.Lstat(base); os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	var paths []string
+	err := filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		entry := indexEntry{
-			ID: m.ID, Title: m.Title, Type: m.Type, Lifecycle: m.Lifecycle, Summary: m.Summary,
-			Projects: nonNil(m.Projects), Topics: nonNil(m.Topics), Tags: nonNil(m.Tags), Aliases: nonNil(m.Aliases),
-			Entities: nonNilEntities(m.Entities), Importance: m.Importance, UpdatedAt: m.Temporal.UpdatedAt,
-			EffectiveFrom: m.Temporal.EffectiveFrom, ProvenanceBasis: m.Provenance.Basis, Confidence: m.Provenance.Confidence,
-			Relationships: nonNilRelationships(relationships), ContentPath: m.ContentPath, Sensitivity: m.Sensitivity,
-			OpenLoopStatus: m.OpenLoopStatus,
+		if d.IsDir() {
+			return nil
 		}
-		if err := enc.Encode(entry); err != nil {
-			return nil, err
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		paths = append(paths, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func GeneratedPaths(root string) ([]string, error) {
+	result, err := Generate(root)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(result.Files))
+	for rel := range result.Files {
+		paths = append(paths, rel)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func MarkStale(root string) error {
+	path := filepath.Join(root, filepath.FromSlash(StaleMarkerPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(staleMarkerText), 0o644)
+}
+
+func IsMarkedStale(root string) bool {
+	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(StaleMarkerPath)))
+	return err == nil
+}
+
+func replaceIndexDirectory(root string, result Result) error {
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	newDir, err := os.MkdirTemp(root, ".gitmemo-index-new-*")
+	if err != nil {
+		return fmt.Errorf("create temporary index directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(newDir) }()
+
+	paths := make([]string, 0, len(result.Files))
+	for rel := range result.Files {
+		paths = append(paths, rel)
+	}
+	sort.Strings(paths)
+	for _, rel := range paths {
+		if !strings.HasPrefix(rel, "index/") {
+			return fmt.Errorf("generated index path escapes index directory: %s", rel)
+		}
+		inside := strings.TrimPrefix(rel, "index/")
+		path := filepath.Join(newDir, filepath.FromSlash(inside))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("create parent for %s: %w", rel, err)
+		}
+		if err := os.WriteFile(path, result.Files[rel], 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", rel, err)
 		}
 	}
-	return out.Bytes(), nil
+
+	indexDir := filepath.Join(root, "index")
+	backupDir, err := os.MkdirTemp(root, ".gitmemo-index-old-*")
+	if err != nil {
+		return fmt.Errorf("reserve backup index path: %w", err)
+	}
+	if err := os.Remove(backupDir); err != nil {
+		return fmt.Errorf("prepare backup index path: %w", err)
+	}
+
+	hadOld := false
+	if _, err := os.Lstat(indexDir); err == nil {
+		if err := os.Rename(indexDir, backupDir); err != nil {
+			return fmt.Errorf("move old index aside: %w", err)
+		}
+		hadOld = true
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect old index: %w", err)
+	}
+
+	if err := os.Rename(newDir, indexDir); err != nil {
+		if hadOld {
+			_ = os.Rename(backupDir, indexDir)
+		}
+		return fmt.Errorf("activate regenerated index: %w", err)
+	}
+	newDir = ""
+	if hadOld {
+		_ = os.RemoveAll(backupDir)
+	}
+	return nil
 }
 
 func renderProjects(root string) []byte {
@@ -175,7 +273,7 @@ func renderOpenLoops(root string, records []memory.Record) []byte {
 	var b strings.Builder
 	b.WriteString("# Open Loops\n")
 	if len(groups) == 0 {
-		b.WriteString("\nNo unresolved open-loop memories.\n\nResolved/cancelled open-loop memories remain discoverable through `index/memories.jsonl` and atomic memory retrieval.\n")
+		b.WriteString("\nNo unresolved open-loop memories.\n\nResolved/cancelled open-loop memories remain discoverable through the sharded machine indexes and atomic memory retrieval.\n")
 		return []byte(b.String())
 	}
 	keys := sortedKeys(groups)
@@ -190,7 +288,7 @@ func renderOpenLoops(root string, records []memory.Record) []byte {
 			b.WriteString(fmt.Sprintf("- `%s` — %s.\n  - Status: `%s`\n  - Memory: `%s`\n", m.ID, strings.TrimSuffix(m.Title, "."), *m.OpenLoopStatus, m.ContentPath))
 		}
 	}
-	b.WriteString("\nResolved/cancelled open-loop memories are intentionally omitted from this active-work index and remain discoverable through `index/memories.jsonl` and atomic memory retrieval.\n")
+	b.WriteString("\nResolved/cancelled open-loop memories are intentionally omitted from this active-work index and remain discoverable through the sharded machine indexes and atomic memory retrieval.\n")
 	return []byte(b.String())
 }
 
@@ -263,21 +361,40 @@ func sortedKeys[T any](m map[string][]T) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+func uniqueStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	out := values[:0]
+	var previous string
+	for i, value := range values {
+		if i == 0 || value != previous {
+			out = append(out, value)
+		}
+		previous = value
+	}
+	return out
+}
+
 func isUnresolved(status string) bool {
 	return status == "open" || status == "blocked" || status == "deferred"
 }
+
 func nonNil(v []string) []string {
 	if v == nil {
 		return []string{}
 	}
 	return v
 }
+
 func nonNilEntities(v []memory.Entity) []memory.Entity {
 	if v == nil {
 		return []memory.Entity{}
 	}
 	return v
 }
+
 func nonNilRelationships(v []indexRelationship) []indexRelationship {
 	if v == nil {
 		return []indexRelationship{}
