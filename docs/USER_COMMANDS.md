@@ -23,7 +23,7 @@ If more than one plausible memory repository exists and the intended target cann
 
 If repository access is unavailable, say so instead of pretending the command was completed.
 
-## `GitMemo: remember <content>`
+## `GitMemo: store <content>`
 
 This is an explicit durable memory-write request.
 
@@ -39,14 +39,14 @@ The assistant MUST:
 8. commit the completed memory change when repository write access is available; and
 9. report what was stored or changed, including the relevant memory ID or IDs and the commit/result actually verified.
 
-The command does not override GitMemo's security rules. Forbidden secrets or credentials MUST NOT be stored merely because the user used `GitMemo: remember`.
+The command does not override GitMemo's security rules. Forbidden secrets or credentials MUST NOT be stored merely because the user used `GitMemo: store`.
 
-An explicit remember command is presumptively eligible for durable storage, but the assistant should still avoid unnecessary duplication and preserve historical meaning correctly.
+An explicit store command is presumptively eligible for durable storage, but the assistant should still avoid unnecessary duplication and preserve historical meaning correctly.
 
 Example:
 
 ```text
-GitMemo: remember that for coding tasks I want actual outputs verified before claiming success.
+GitMemo: store that for coding tasks I want actual outputs verified before claiming success.
 ```
 
 ## `GitMemo: search <query>`
@@ -76,6 +76,12 @@ GitMemo: search what we decided about Go versus Python.
 GitMemo: search for unresolved GitMemo work.
 ```
 
+## Why `store`, not `remember`
+
+`remember` is intentionally not the canonical write command because ordinary conversation uses that word both for storing information and for recalling information. `store` is unambiguous: it means persist this in GitMemo.
+
+An assistant MUST NOT interpret `GitMemo: remember ...` as an explicit durable write merely from the word `remember`. If the user's intent is clear from additional wording, follow that intent; otherwise prefer the canonical `store` and `search` commands.
+
 ## Ordinary use
 
 A user may also say something like `use GitMemo` without using one of the explicit commands. That means the assistant may consult GitMemo as context when materially useful, but it is not by itself an explicit request to create a new durable memory.
@@ -83,6 +89,6 @@ A user may also say something like `use GitMemo` without using one of the explic
 The two primary commands are intentionally small and stable:
 
 ```text
-GitMemo: remember ...
+GitMemo: store ...
 GitMemo: search ...
 ```
