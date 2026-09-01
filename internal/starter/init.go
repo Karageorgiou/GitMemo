@@ -13,17 +13,25 @@ import (
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
 )
 
+const contractVersion = 2
+
 const memoryRepoReadme = `# GitMemo Memory
 
 Private, user-owned persistent memory for AI assistants.
 
-> **AI / LLM OPERATORS:** Read and follow [MEMORY_PROTOCOL.md](MEMORY_PROTOCOL.md) before retrieving from or modifying this repository.
+> **AI / LLM OPERATORS:** Read and follow [MEMORY_PROTOCOL.md](MEMORY_PROTOCOL.md) before retrieving from or modifying this repository. The user-facing command convention is defined in [docs/USER_COMMANDS.md](docs/USER_COMMANDS.md).
 
 This repository contains memory data and a pinned operational contract. The GitMemo implementation itself lives separately at ` + "`github.com/Karageorgiou/GitMemo`" + `.
+
+## Quick commands
+
+- ` + "`GitMemo: remember ...`" + ` — explicit durable memory write.
+- ` + "`GitMemo: search ...`" + ` — retrieval-only search; do not modify memories.
 
 ## Repository contents
 
 - ` + "`MEMORY_PROTOCOL.md`" + ` — mandatory operating instructions.
+- ` + "`docs/USER_COMMANDS.md`" + ` — user-facing remember/search command contract.
 - ` + "`schema/`" + ` — machine-readable memory schema.
 - ` + "`docs/`" + ` — memory format, taxonomy, and validation contract.
 - ` + "`templates/`" + ` — authoring scaffolds for the eight memory types.
@@ -68,7 +76,7 @@ func Init(root string) error {
 	if err := writeNew(root, "README.md", []byte(memoryRepoReadme)); err != nil {
 		return err
 	}
-	cfg, err := json.MarshalIndent(config{RepositoryFormat: 1, SchemaVersion: 1, ContractVersion: 1}, "", "  ")
+	cfg, err := json.MarshalIndent(config{RepositoryFormat: 1, SchemaVersion: 1, ContractVersion: contractVersion}, "", "  ")
 	if err != nil {
 		return err
 	}
