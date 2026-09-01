@@ -2,8 +2,10 @@ name: Release GitMemo
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - main
+    paths:
+      - '.github/release-request.json'
 
 permissions:
   contents: write
@@ -12,8 +14,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out tagged source
+      - name: Check out release source
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -21,31 +25,65 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Verify tag matches source version
+      - name: Resolve and verify requested version
+        id: release
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          SOURCE_VERSION="$(go run ./cmd/gitmemo version)"
-          if [ "$TAG" != "$SOURCE_VERSION" ]; then
-            echo "release tag $TAG does not match source version $SOURCE_VERSION" >&2
+          VERSION="$(jq -r '.version' .github/release-request.json)"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "release request does not contain a version" >&2
             exit 1
           fi
+          SOURCE_VERSION="$(go run ./cmd/gitmemo version)"
+          if [ "$VERSION" != "$SOURCE_VERSION" ]; then
+            echo "requested release $VERSION does not match source version $SOURCE_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Detect an already-published identical release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if ! RELEASE_JSON="$(gh release view "$VERSION" --json isDraft,targetCommitish,tagName 2>/dev/null)"; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          IS_DRAFT="$(jq -r '.isDraft' <<<"$RELEASE_JSON")"
+          TARGET="$(jq -r '.targetCommitish' <<<"$RELEASE_JSON")"
+          if [ "$IS_DRAFT" = "false" ]; then
+            if [ "$TARGET" != "$GITHUB_SHA" ]; then
+              echo "release $VERSION already exists for target $TARGET, not $GITHUB_SHA" >&2
+              exit 1
+            fi
+            echo "GitMemo $VERSION is already published from this exact commit."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "published=false" >> "$GITHUB_OUTPUT"
 
       - name: Run release tests
+        if: steps.existing.outputs.published != 'true'
         run: |
           go test ./...
           go vet ./...
 
       - name: Build and validate release CLI
+        if: steps.existing.outputs.published != 'true'
         run: |
           mkdir -p dist
           go build -trimpath -o dist/gitmemo-linux-amd64 ./cmd/gitmemo
-          ./dist/gitmemo version
+          ./dist/gitmemo-linux-amd64 version
           rm -rf "$RUNNER_TEMP/gitmemo-release-smoke"
-          ./dist/gitmemo init "$RUNNER_TEMP/gitmemo-release-smoke"
-          ./dist/gitmemo index --check "$RUNNER_TEMP/gitmemo-release-smoke"
-          ./dist/gitmemo validate "$RUNNER_TEMP/gitmemo-release-smoke"
+          ./dist/gitmemo-linux-amd64 init "$RUNNER_TEMP/gitmemo-release-smoke"
+          ./dist/gitmemo-linux-amd64 index --check "$RUNNER_TEMP/gitmemo-release-smoke"
+          ./dist/gitmemo-linux-amd64 validate "$RUNNER_TEMP/gitmemo-release-smoke"
 
       - name: Build platform binaries
+        if: steps.existing.outputs.published != 'true'
         env:
           CGO_ENABLED: '0'
         run: |
@@ -67,24 +105,69 @@ jobs:
               gitmemo-windows-amd64.exe > SHA256SUMS.txt
           )
 
-      - name: Create draft release with all assets
+      - name: Create or reuse draft release
+        if: steps.existing.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "$VERSION" --json isDraft --jq '.isDraft')"
+            if [ "$IS_DRAFT" != "true" ]; then
+              echo "release $VERSION unexpectedly became published" >&2
+              exit 1
+            fi
+          else
+            gh release create "$VERSION" \
+              --target "$GITHUB_SHA" \
+              --draft \
+              --title "GitMemo $VERSION" \
+              --generate-notes
+          fi
+
+      - name: Upload complete release asset set
+        if: steps.existing.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh release upload "$VERSION" \
             dist/gitmemo-linux-amd64 \
             dist/gitmemo-linux-arm64 \
             dist/gitmemo-darwin-amd64 \
             dist/gitmemo-darwin-arm64 \
             dist/gitmemo-windows-amd64.exe \
             dist/SHA256SUMS.txt \
-            --verify-tag \
-            --draft \
-            --title "GitMemo $GITHUB_REF_NAME" \
-            --generate-notes
+            --clobber
 
-      - name: Publish completed release
+      - name: Verify draft before immutable publication
+        if: steps.existing.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          RELEASE_JSON="$(gh release view "$VERSION" --json isDraft,targetCommitish,assets)"
+          test "$(jq -r '.isDraft' <<<"$RELEASE_JSON")" = "true"
+          test "$(jq -r '.targetCommitish' <<<"$RELEASE_JSON")" = "$GITHUB_SHA"
+
+          EXPECTED="$(printf '%s\n' \
+            SHA256SUMS.txt \
+            gitmemo-darwin-amd64 \
+            gitmemo-darwin-arm64 \
+            gitmemo-linux-amd64 \
+            gitmemo-linux-arm64 \
+            gitmemo-windows-amd64.exe | sort)"
+          ACTUAL="$(jq -r '.assets[].name' <<<"$RELEASE_JSON" | sort)"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "release asset set is incomplete or unexpected" >&2
+            printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED" "$ACTUAL" >&2
+            exit 1
+          fi
+
+      - name: Publish completed release
+        if: steps.existing.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh release edit "$VERSION" --draft=false --latest
