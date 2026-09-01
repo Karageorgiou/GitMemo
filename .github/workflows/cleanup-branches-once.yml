@@ -1,0 +1,27 @@
+name: Clean GitMemo Working Branches Once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+      - name: Delete merged and temporary branches
+        run: |
+          for branch in \
+            bootstrap/infrastructure \
+            feat/upgrade-v0.2.0 \
+            feat/user-command-interface \
+            publish/v0.1.0 \
+            publish/v0.2.0 \
+            release/v0.1.0-ready
+          do
+            git push origin --delete "$branch"
+          done
