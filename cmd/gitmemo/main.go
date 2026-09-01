@@ -35,6 +35,8 @@ func run(args []string) int {
 		return runValidate(args[1:])
 	case "index":
 		return runIndex(args[1:])
+	case "search":
+		return runSearch(args[1:])
 	case "trust":
 		return runTrust(args[1:])
 	case "version":
@@ -139,11 +141,18 @@ func runIndex(args []string) int {
 	fs.SetOutput(os.Stderr)
 	check := fs.Bool("check", false, "fail if committed indexes are stale")
 	write := fs.Bool("write", false, "regenerate committed indexes")
+	markStale := fs.Bool("mark-stale", false, "mark generated indexes as potentially incomplete")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *check == *write {
-		fmt.Fprintln(os.Stderr, "index requires exactly one of --check or --write")
+	selected := 0
+	for _, value := range []bool{*check, *write, *markStale} {
+		if value {
+			selected++
+		}
+	}
+	if selected != 1 {
+		fmt.Fprintln(os.Stderr, "index requires exactly one of --check, --write, or --mark-stale")
 		return 2
 	}
 	root := "."
@@ -153,6 +162,14 @@ func runIndex(args []string) int {
 	}
 	if fs.NArg() == 1 {
 		root = fs.Arg(0)
+	}
+	if *markStale {
+		if err := indexer.MarkStale(root); err != nil {
+			fmt.Fprintln(os.Stderr, "index stale marker failed:", err)
+			return 1
+		}
+		fmt.Println("GitMemo indexes marked stale; canonical memories remain authoritative.")
+		return 0
 	}
 	if *write {
 		if err := indexer.Write(root); err != nil {
@@ -259,5 +276,5 @@ func isInteractive(file *os.File) bool {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "GitMemo repository tooling\n\nUsage:\n  gitmemo init [dir]\n  gitmemo upgrade [root]\n  gitmemo validate [--json] [root]\n  gitmemo index --check [root]\n  gitmemo index --write [root]\n  gitmemo trust version [root]\n  gitmemo version")
+	fmt.Fprintln(os.Stderr, "GitMemo repository tooling\n\nUsage:\n  gitmemo init [dir]\n  gitmemo upgrade [root]\n  gitmemo validate [--json] [root]\n  gitmemo search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  gitmemo index --check [root]\n  gitmemo index --write [root]\n  gitmemo index --mark-stale [root]\n  gitmemo trust version [root]\n  gitmemo version")
 }
