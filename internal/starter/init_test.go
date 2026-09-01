@@ -22,6 +22,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		"docs/EXTENDING_GITMEMO.md",
 		"docs/TRUST_MODEL.md",
 		"docs/SOURCES.md",
+		"docs/INDEX_FORMAT.md",
 		"schema/memory-item.schema.json",
 		"templates/open_loop.md",
 		".gitmemo/config.json",
@@ -54,7 +55,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	lockText := string(lock)
-	if !strings.Contains(lockText, `"lock_version": 1`) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) {
+	if !strings.Contains(lockText, `"lock_version": 1`) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) || !strings.Contains(lockText, `"docs/INDEX_FORMAT.md"`) {
 		t.Fatalf("unexpected trust lock: %s", lock)
 	}
 
