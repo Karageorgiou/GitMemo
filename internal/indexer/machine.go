@@ -14,7 +14,7 @@ import (
 	"github.com/Karageorgiou/GitMemo/internal/memory"
 )
 
-const termShardPrefixRunes = 2
+const termShardHashHexCharacters = 3
 
 const idShardPrefixCharacters = 2
 
@@ -30,13 +30,13 @@ type catalogLayout struct {
 }
 
 type catalog struct {
-	IndexVersion             int           `json:"index_version"`
-	RecordCount              int           `json:"record_count"`
-	MemorySourceSHA256       string        `json:"memory_source_sha256"`
-	IDShardPrefixCharacters  int           `json:"id_shard_prefix_characters"`
-	TermShardPrefixRunes     int           `json:"term_shard_prefix_runes"`
-	TermFields               []string      `json:"term_fields"`
-	Layout                   catalogLayout `json:"layout"`
+	IndexVersion               int           `json:"index_version"`
+	RecordCount                int           `json:"record_count"`
+	MemorySourceSHA256         string        `json:"memory_source_sha256"`
+	IDShardPrefixCharacters    int           `json:"id_shard_prefix_characters"`
+	TermShardHashHexCharacters int           `json:"term_shard_hash_hex_characters"`
+	TermFields                 []string      `json:"term_fields"`
+	Layout                     catalogLayout `json:"layout"`
 }
 
 type idList struct {
@@ -58,15 +58,9 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 	byLifecycle := map[string][]string{}
 	byOpenLoopStatus := map[string][]string{}
 	termShards := map[string]map[string][]termPosting{}
-	seenIDs := map[string]bool{}
 
 	for _, record := range records {
 		m := record.Memory
-		if seenIDs[m.ID] {
-			return nil, fmt.Errorf("cannot generate index with duplicate memory UUID %s", m.ID)
-		}
-		seenIDs[m.ID] = true
-
 		entry := makeIndexEntry(m)
 		prefix, err := idShardPrefix(m.ID)
 		if err != nil {
@@ -142,11 +136,11 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 		return nil, err
 	}
 	cat := catalog{
-		IndexVersion:            IndexVersion,
-		RecordCount:             len(records),
-		MemorySourceSHA256:      digest,
-		IDShardPrefixCharacters: idShardPrefixCharacters,
-		TermShardPrefixRunes:    termShardPrefixRunes,
+		IndexVersion:               IndexVersion,
+		RecordCount:                len(records),
+		MemorySourceSHA256:         digest,
+		IDShardPrefixCharacters:    idShardPrefixCharacters,
+		TermShardHashHexCharacters: termShardHashHexCharacters,
 		TermFields: []string{
 			"title", "aliases", "projects", "topics", "tags", "entities", "type", "lifecycle", "open_loop_status", "summary",
 		},
@@ -158,7 +152,7 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 			ByType:           "index/by-type/<memory-type>.json",
 			ByLifecycle:      "index/by-lifecycle/<lifecycle>.json",
 			ByOpenLoopStatus: "index/by-open-loop-status/<status>.json",
-			Terms:            "index/terms/<first-2-normalized-term-runes>.json",
+			Terms:            "index/terms/<sha256-term-prefix>.json",
 		},
 	}
 	catalogData, err := json.MarshalIndent(cat, "", "  ")
@@ -259,11 +253,9 @@ func tokenize(text string) []string {
 }
 
 func termBucket(term string) string {
-	runes := []rune(term)
-	if len(runes) <= termShardPrefixRunes {
-		return term
-	}
-	return string(runes[:termShardPrefixRunes])
+	sum := sha256.Sum256([]byte(term))
+	hexsum := hex.EncodeToString(sum[:])
+	return hexsum[:termShardHashHexCharacters]
 }
 
 func idShardPrefix(id string) (string, error) {

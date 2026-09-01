@@ -45,8 +45,8 @@ func writeMemoryText(t *testing.T, root, id, slug, typ, status, title, summary s
 			"sources": []any{map[string]any{"kind": "conversation", "locator": "test", "revision": nil, "note": nil}},
 		},
 		"relationships": []any{},
-		"content_path": "memories/projects/test/" + slug + "--" + id[:8] + ".md",
-		"sensitivity": "routine",
+		"content_path":  "memories/projects/test/" + slug + "--" + id[:8] + ".md",
+		"sensitivity":   "routine",
 	}
 	if typ == "open_loop" {
 		m["open_loop_status"] = status
@@ -236,15 +236,16 @@ func TestGenerateDeterministic(t *testing.T) {
 	}
 }
 
-func TestUnicodeTermsUseReadableShardPrefix(t *testing.T) {
+func TestUnicodeTermsUseHashShard(t *testing.T) {
 	root := setup(t)
 	writeMemoryText(t, root, "11111111-1111-4111-8111-111111111111", "athens", "fact", "", "Αθήνα ταξίδι", "Σημειώσεις για την Αθήνα.")
 	r, err := Generate(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := r.Files["index/terms/αθ.json"]; !ok {
-		t.Fatalf("expected readable Unicode term shard, got generated paths: %v", mapKeys(r.Files))
+	bucket := termBucket("αθήνα")
+	if _, ok := r.Files["index/terms/"+bucket+".json"]; !ok {
+		t.Fatalf("expected Unicode term in deterministic hash shard %s, got generated paths: %v", bucket, mapKeys(r.Files))
 	}
 }
 

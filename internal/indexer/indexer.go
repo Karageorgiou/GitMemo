@@ -59,7 +59,12 @@ func Generate(root string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Memory.ID < records[j].Memory.ID })
+	sort.SliceStable(records, func(i, j int) bool {
+		if records[i].Memory.ID != records[j].Memory.ID {
+			return records[i].Memory.ID < records[j].Memory.ID
+		}
+		return records[i].Path < records[j].Path
+	})
 
 	files, err := renderMachineIndexes(root, records)
 	if err != nil {

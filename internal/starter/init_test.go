@@ -3,6 +3,7 @@ package starter
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		".github/workflows/validate.yml",
 		"memories/.gitkeep",
 		"projects/.gitkeep",
-		"index/memories.jsonl",
+		"index/catalog.json",
 		"index/projects.md",
 		"index/open-loops.md",
 		"index/preferences.md",
@@ -44,7 +45,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	}
 	configText := string(config)
 	versionField := `"gitmemo_version": "` + buildinfo.ReleaseVersion + `"`
-	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 5`) || !strings.Contains(configText, versionField) {
+	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) {
 		t.Fatalf("unexpected config: %s", config)
 	}
 
