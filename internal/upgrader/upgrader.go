@@ -14,6 +14,7 @@ import (
 	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
 	"github.com/Karageorgiou/GitMemo/internal/starter"
+	"github.com/Karageorgiou/GitMemo/internal/trust"
 	"github.com/Karageorgiou/GitMemo/internal/validation"
 )
 
@@ -167,7 +168,7 @@ func checkCompatibility(cfg repositoryConfig) error {
 }
 
 func desiredManagedFiles(root, fromVersion string) (map[string][]byte, error) {
-	desired := make(map[string][]byte, len(gitmemo.ContractPaths())+3)
+	desired := make(map[string][]byte, len(gitmemo.ContractPaths())+4)
 	for _, rel := range gitmemo.ContractPaths() {
 		data, err := fs.ReadFile(gitmemo.ContractFS, rel)
 		if err != nil {
@@ -180,6 +181,11 @@ func desiredManagedFiles(root, fromVersion string) (map[string][]byte, error) {
 		return nil, fmt.Errorf("render repository config: %w", err)
 	}
 	desired[".gitmemo/config.json"] = cfg
+	lock, err := trust.JSON()
+	if err != nil {
+		return nil, fmt.Errorf("render trust lock: %w", err)
+	}
+	desired[".gitmemo/lock.json"] = lock
 	desired[".github/workflows/validate.yml"] = starter.ValidationWorkflow()
 
 	readmePath := filepath.Join(root, "README.md")
@@ -196,6 +202,9 @@ func desiredManagedFiles(root, fromVersion string) (map[string][]byte, error) {
 
 func updateReadme(data []byte, fromVersion string) []byte {
 	text := string(data)
+	if strings.HasPrefix(text, "# GitMemo Memory\n") && (strings.Contains(text, "GitMemo: store") || strings.Contains(text, "GitMemo: remember")) {
+		return starter.MemoryRepoReadme()
+	}
 	text = strings.ReplaceAll(text, "`GitMemo: remember ...` — explicit durable memory write.", "`GitMemo: store ...` — explicit durable memory write.")
 	text = strings.ReplaceAll(text, "user-facing remember/search command contract", "user-facing store/search command contract")
 	if fromVersion != "" && fromVersion != "unversioned" {
