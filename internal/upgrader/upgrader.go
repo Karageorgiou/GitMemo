@@ -40,13 +40,6 @@ type snapshot struct {
 	mode   fs.FileMode
 }
 
-var indexPaths = []string{
-	"index/memories.jsonl",
-	"index/projects.md",
-	"index/open-loops.md",
-	"index/preferences.md",
-}
-
 // Apply upgrades a GitMemo memory repository to the repository contract embedded
 // in the running GitMemo binary. User memories and project data are never
 // rewritten by this operation.
@@ -72,19 +65,33 @@ func Apply(root string) (Result, error) {
 		return Result{}, err
 	}
 
-	tracked := make([]string, 0, len(desired)+len(indexPaths))
-	for rel := range desired {
-		tracked = append(tracked, rel)
+	existingIndexPaths, err := indexer.ExistingPaths(root)
+	if err != nil {
+		return Result{}, fmt.Errorf("inspect existing indexes: %w", err)
 	}
-	tracked = append(tracked, indexPaths...)
-	sort.Strings(tracked)
+	generatedIndexPaths, err := indexer.GeneratedPaths(root)
+	if err != nil {
+		return Result{}, fmt.Errorf("plan regenerated indexes: %w", err)
+	}
+
+	trackedSet := map[string]bool{}
+	for rel := range desired {
+		trackedSet[rel] = true
+	}
+	for _, rel := range existingIndexPaths {
+		trackedSet[rel] = true
+	}
+	for _, rel := range generatedIndexPaths {
+		trackedSet[rel] = true
+	}
+	tracked := sortedSet(trackedSet)
 
 	snapshots, err := takeSnapshots(root, tracked)
 	if err != nil {
 		return Result{}, err
 	}
 
-	changed := make([]string, 0, len(desired)+len(indexPaths))
+	changed := make([]string, 0, len(tracked))
 	for rel, data := range desired {
 		old := snapshots[rel]
 		if old.exists && bytes.Equal(old.data, data) {
@@ -101,13 +108,31 @@ func Apply(root string) (Result, error) {
 		_ = restoreSnapshots(root, snapshots)
 		return Result{}, fmt.Errorf("regenerate indexes during upgrade: %w", err)
 	}
-	for _, rel := range indexPaths {
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
-		if err != nil {
-			_ = restoreSnapshots(root, snapshots)
-			return Result{}, fmt.Errorf("read regenerated %s: %w", rel, err)
-		}
+	currentIndexPaths, err := indexer.ExistingPaths(root)
+	if err != nil {
+		_ = restoreSnapshots(root, snapshots)
+		return Result{}, fmt.Errorf("inspect regenerated indexes: %w", err)
+	}
+	indexUnion := map[string]bool{}
+	for _, rel := range existingIndexPaths {
+		indexUnion[rel] = true
+	}
+	for _, rel := range currentIndexPaths {
+		indexUnion[rel] = true
+	}
+	for _, rel := range sortedSet(indexUnion) {
 		old := snapshots[rel]
+		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if os.IsNotExist(readErr) {
+			if old.exists {
+				changed = append(changed, rel)
+			}
+			continue
+		}
+		if readErr != nil {
+			_ = restoreSnapshots(root, snapshots)
+			return Result{}, fmt.Errorf("read regenerated %s: %w", rel, readErr)
+		}
 		if !old.exists || !bytes.Equal(old.data, data) {
 			changed = append(changed, rel)
 		}
@@ -329,6 +354,15 @@ func atomicWrite(root, rel string, data []byte, mode fs.FileMode) error {
 		return fmt.Errorf("replace %s: %w", rel, err)
 	}
 	return nil
+}
+
+func sortedSet(values map[string]bool) []string {
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func unique(values []string) []string {
