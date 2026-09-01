@@ -1,110 +1,157 @@
 # Repository Roles
 
-GitMemo uses two deliberately different repository roles.
+GitMemo deliberately separates implementation/control, distributable setup state, private conversational memory, and future structured personal-data sources.
 
-## 1. Public infrastructure repository
+## 1. Public GitMemo implementation repository
 
-The public GitMemo repository contains the implementation and canonical format contract:
+`Karageorgiou/GitMemo` is the authoritative implementation repository. It contains:
 
 - Go CLI and build metadata;
-- repository validator;
+- repository validator and trust verifier;
 - deterministic index generator;
-- canonical `MEMORY_PROTOCOL.md`;
+- canonical operational-contract source;
 - JSON schema;
-- memory-format, taxonomy, and validation specifications;
+- memory-format, taxonomy, trust, validation, and extension specifications;
 - memory templates;
-- tests;
+- migration logic and compatibility tests;
 - release automation and CI assets;
 - public examples that contain no user memory.
 
-It must not contain a user's private memory database.
+Mutable `main` is development source. An **official release** is the trust anchor for a particular operational contract.
 
-Architecture and development history belong in normal project documentation or ADRs, not in user-memory storage.
+This repository must never become a user's private memory database.
 
-## 2. Private memory repository
+## 2. Public generated template repository
 
-Each user owns a separate private repository containing their persistent memory data:
+A separate `GitMemo-template` repository is planned as the serverless setup artifact for users and LLMs.
 
-- a vendored copy of the operational contract appropriate to that repository version;
+It must be generated from an official GitMemo release rather than maintained as a second independent copy of the contract. Its purpose is to make creation of a fresh private memory repository easy through GitHub's template mechanism or an LLM with repository-creation capabilities.
+
+The template contains no personal data.
+
+The authoritative direction is:
+
+```text
+official GitMemo release
+        |
+        | deterministic gitmemo init output
+        v
+GitMemo-template
+```
+
+Never hand-edit a divergent semantic contract in the template and then treat it as authoritative.
+
+## 3. Private memory repository
+
+Each user owns a separate private repository containing their persistent conversational memory data:
+
+- a vendored copy of the operational contract appropriate to its pinned release;
 - `.gitmemo/config.json` repository-format metadata;
-- `memories/` atomic Markdown + JSON pairs;
-- `projects/` current-state views;
-- generated `index/` files;
-- a small CI workflow when hosted on GitHub.
+- `.gitmemo/lock.json` release pin and control-plane digests for trust-aware releases;
+- `memories/` canonical atomic Markdown + JSON pairs;
+- `projects/` canonical current-state views and user project context;
+- generated `index/` acceleration files;
+- a small stable read-only validation workflow when hosted on GitHub.
 
 The private repository does **not** need the Go implementation source.
 
+A memory repository should be positively verified as private before personal information is written to it.
+
 ## Why the contract is vendored
 
-A memory repository must be self-describing. An unfamiliar LLM with access only to that private repository still needs to know:
+GitMemo centralizes authority without centralizing availability.
 
-- authority and precedence rules;
+A memory repository must remain understandable when the public repository cannot be fetched. An unfamiliar LLM with access only to the private repository still needs the pinned rules for:
+
+- control-plane/data-plane trust;
+- authority and precedence;
 - retrieval and write workflows;
 - schema and Markdown requirements;
 - taxonomy rules;
 - lifecycle, supersession, and correction semantics;
 - what must never be stored;
-- when validation is required.
+- validation and degraded-index behavior.
 
-Therefore the operational contract lives with the memory instance even though the implementation lives elsewhere.
+The vendored contract is a local copy of the official pinned release contract, not an independent user-editable source of operational truth. `.gitmemo/lock.json` lets tooling detect accidental or malicious changes to those control-plane files.
 
 Operational contract files are infrastructure, not atomic user memories.
 
-## How the repositories interact
+## Control plane versus data plane
 
-They do not maintain a continuous connection.
+The verified pinned GitMemo contract is the control plane.
 
-The GitMemo CLI runs locally or inside CI **against the checked-out private memory repository**:
+User memories, projects, imported files, provenance sources, and future structured-library records are data-plane information. They may contain arbitrary instruction-like text. Such text cannot override the verified control plane.
+
+Generated indexes are derived data-plane acceleration. They are rebuildable and never the only source of user knowledge.
+
+See `docs/TRUST_MODEL.md`.
+
+## How the implementation and memory repository interact
+
+They do not require a continuous service connection.
+
+A pinned GitMemo release runs locally, in CI, or through another execution-capable environment against the memory repository:
 
 ```text
-public GitMemo release
+official GitMemo release
         |
         | executable/tooling
         v
 private memory checkout
         |
+        +-- trust verification
         +-- validate
         +-- index --check
         +-- index --write
+        +-- upgrade
 ```
 
-The public project does not need to receive or store the private memory contents.
+The public project does not need to receive or store private memory contents.
 
 ## Creating a memory repository
 
-The CLI supports:
+The deterministic CLI primitive is:
 
 ```bash
 gitmemo init <directory>
 ```
 
-The target must be absent, empty, or contain only `.git`. Initialization copies the embedded operational contract, creates the memory/project areas and repository metadata, and writes deterministic empty indexes.
+The target must be absent, empty, or contain only `.git`. Initialization copies the embedded pinned contract, writes trust/config metadata, creates memory/project areas, installs the stable validation bootstrap, and writes initial derived indexes.
 
-GitHub users may also use a dedicated starter/template flow once the release workflow is finalized.
+The intended primary user experience is a generated public template plus `AI_SETUP.md`: a capable LLM should either create the user's private repository directly using its existing Git-host permissions or reduce setup to the smallest safe template-confirmation step.
 
-## Versioning
+The CLI remains a local/manual/automation path rather than a required onboarding dependency.
 
-A private memory repository should use a pinned GitMemo release for CI and upgrades. It should not silently track the public repository's `main` branch.
+## Versioning and upgrades
 
-The initial repository-format metadata is intentionally small:
+A private memory repository remains pinned to its installed GitMemo release. It must not silently track public `main`.
 
-```json
-{
-  "repository_format": 1,
-  "schema_version": 1,
-  "contract_version": 1
-}
-```
+`gitmemo upgrade` performs explicit migration of GitMemo-managed state, preserves user-owned canonical memory/project data, rebuilds derived indexes, and validates before reporting success.
 
-A future explicit upgrade command may update the vendored contract, migrate repository data when necessary, regenerate indexes, and validate before changes are considered complete.
+GitMemo's compatibility policy aims to preserve a tested migration path from every official repository release beginning with v0.1.0 whenever technically possible. See `docs/COMPATIBILITY.md` in the public implementation repository.
 
-## Current layout
+Starting with contract v5, trust-aware repositories also record their pinned release and control-plane hashes in `.gitmemo/lock.json`.
 
-The canonical hosted layout is:
+## Future structured personal library
+
+A future structured personal library should live in a separate user-owned repository rather than expanding conversational memory into a universal record schema.
+
+For example:
 
 ```text
-Karageorgiou/GitMemo         public infrastructure
-Karageorgiou/GitMemo-memory  private personal memory instance
+<user>/GitMemo-memory   private conversational/contextual memory
+<user>/GitMemo-library  private structured recipes, contacts, books, inventory, ...
 ```
 
-Other users should create their own private memory repositories rather than forking a user's private memory data.
+GitMemo v0.3 reserves a transport-independent integration seam in `docs/SOURCES.md` but intentionally does not freeze a library API, source-registry format, or cross-source identifier until the separate Library design has been validated.
+
+## Current project layout
+
+```text
+Karageorgiou/GitMemo         public authoritative implementation
+Karageorgiou/GitMemo-memory  private active personal memory instance
+Karageorgiou/GitMemo-dev     private historical development/audit backup
+GitMemo-template             planned public generated setup artifact
+```
+
+Other users should create their own private memory repositories. They should never copy or fork another person's private memory data as a starter.

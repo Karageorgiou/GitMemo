@@ -1,8 +1,10 @@
 package buildinfo
 
 const (
-	ReleaseVersion          = "v0.2.0"
+	ReleaseVersion          = "v0.3.0"
 	RepositoryFormatVersion = 1
 	SchemaVersion           = 1
-	ContractVersion         = 4
+	ContractVersion         = 5
+	TrustLockVersion        = 1
+	BootstrapVerifierVersion = "v0.3.0"
 )

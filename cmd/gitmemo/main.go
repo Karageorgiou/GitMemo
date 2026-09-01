@@ -11,6 +11,7 @@ import (
 	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
 	"github.com/Karageorgiou/GitMemo/internal/starter"
+	"github.com/Karageorgiou/GitMemo/internal/trust"
 	"github.com/Karageorgiou/GitMemo/internal/upgrader"
 	"github.com/Karageorgiou/GitMemo/internal/validation"
 )
@@ -34,6 +35,8 @@ func run(args []string) int {
 		return runValidate(args[1:])
 	case "index":
 		return runIndex(args[1:])
+	case "trust":
+		return runTrust(args[1:])
 	case "version":
 		fmt.Println(buildinfo.ReleaseVersion)
 		return 0
@@ -175,6 +178,28 @@ func runIndex(args []string) int {
 	return 0
 }
 
+func runTrust(args []string) int {
+	if len(args) == 0 || args[0] != "version" {
+		fmt.Fprintln(os.Stderr, "trust requires subcommand: trust version [root]")
+		return 2
+	}
+	if len(args) > 2 {
+		fmt.Fprintln(os.Stderr, "trust version accepts at most one repository root")
+		return 2
+	}
+	root := "."
+	if len(args) == 2 {
+		root = args[1]
+	}
+	version, err := trust.ReadPinnedVersion(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "trust version failed:", err)
+		return 1
+	}
+	fmt.Println(version)
+	return 0
+}
+
 func runWizard() int {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("GitMemo %s\n", buildinfo.ReleaseVersion)
@@ -234,5 +259,5 @@ func isInteractive(file *os.File) bool {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "GitMemo repository tooling\n\nUsage:\n  gitmemo init [dir]\n  gitmemo upgrade [root]\n  gitmemo validate [--json] [root]\n  gitmemo index --check [root]\n  gitmemo index --write [root]\n  gitmemo version")
+	fmt.Fprintln(os.Stderr, "GitMemo repository tooling\n\nUsage:\n  gitmemo init [dir]\n  gitmemo upgrade [root]\n  gitmemo validate [--json] [root]\n  gitmemo index --check [root]\n  gitmemo index --write [root]\n  gitmemo trust version [root]\n  gitmemo version")
 }

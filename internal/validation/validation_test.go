@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Karageorgiou/GitMemo/internal/indexer"
+	"github.com/Karageorgiou/GitMemo/internal/starter"
 )
 
 const (
@@ -22,15 +23,12 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	root := t.TempDir()
-	mustMkdir(t, filepath.Join(root, "schema"))
-	mustMkdir(t, filepath.Join(root, "memories", "projects", "test"))
-	mustMkdir(t, filepath.Join(root, "projects", "test"))
-	schema, err := os.ReadFile(filepath.Join("..", "..", "schema", "memory-item.schema.json"))
-	if err != nil {
+	root := filepath.Join(t.TempDir(), "memory")
+	if err := starter.Init(root); err != nil {
 		t.Fatal(err)
 	}
-	mustWrite(t, filepath.Join(root, "schema", "memory-item.schema.json"), schema)
+	mustMkdir(t, filepath.Join(root, "memories", "projects", "test"))
+	mustMkdir(t, filepath.Join(root, "projects", "test"))
 	mustWrite(t, filepath.Join(root, "projects", "test", "overview.md"), []byte("# Test — Project Overview\n"))
 	return &fixture{t: t, root: root}
 }
@@ -299,11 +297,12 @@ func TestSchemaContractDrift(t *testing.T) {
 	v["title"] = "changed"
 	b, _ = json.Marshal(v)
 	mustWrite(t, path, b)
-	if !codes(Validate(f.root))["SCHEMA_CONTRACT"] {
-		t.Fatal("expected SCHEMA_CONTRACT")
+	got := codes(Validate(f.root))
+	if !got["SCHEMA_CONTRACT"] || !got["TRUST_LOCK"] {
+		t.Fatalf("expected schema and trust errors, got %v", got)
 	}
 }
-func TestStaleIndexDetected(t *testing.T) {
+func TestStaleIndexIsWarningOnly(t *testing.T) {
 	f := newFixture(t)
 	side, _ := f.writePair(idA, "stale", nil)
 	f.syncIndexes()
@@ -313,7 +312,33 @@ func TestStaleIndexDetected(t *testing.T) {
 	v["summary"] = "Changed summary."
 	b, _ = json.MarshalIndent(v, "", "  ")
 	mustWrite(t, side, b)
-	if !codes(Validate(f.root))["INDEX_STALE"] {
-		t.Fatal("expected INDEX_STALE")
+	issues := Validate(f.root)
+	found := false
+	for _, issue := range issues {
+		if issue.Code == "INDEX_STALE" {
+			found = true
+			if issue.Severity != "WARNING" {
+				t.Fatalf("INDEX_STALE severity = %s, want WARNING", issue.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected INDEX_STALE warning")
+	}
+	if HasErrors(issues) {
+		t.Fatalf("stale derived index should not invalidate canonical repository data: %+v", issues)
+	}
+}
+func TestControlPlaneTamperDetected(t *testing.T) {
+	f := newFixture(t)
+	f.syncIndexes()
+	path := filepath.Join(f.root, "docs", "TRUST_MODEL.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, path, append(data, []byte("\nModified locally.\n")...))
+	if !codes(Validate(f.root))["TRUST_LOCK"] {
+		t.Fatal("expected TRUST_LOCK after control-plane modification")
 	}
 }

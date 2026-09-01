@@ -17,9 +17,12 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		"MEMORY_PROTOCOL.md",
 		"docs/USER_COMMANDS.md",
 		"docs/EXTENDING_GITMEMO.md",
+		"docs/TRUST_MODEL.md",
+		"docs/SOURCES.md",
 		"schema/memory-item.schema.json",
 		"templates/open_loop.md",
 		".gitmemo/config.json",
+		".gitmemo/lock.json",
 		".github/workflows/validate.yml",
 		"memories/.gitkeep",
 		"projects/.gitkeep",
@@ -38,8 +41,17 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	configText := string(config)
-	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 4`) || !strings.Contains(configText, `"gitmemo_version": "v0.2.0"`) {
+	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": 5`) || !strings.Contains(configText, `"gitmemo_version": "v0.3.0"`) {
 		t.Fatalf("unexpected config: %s", config)
+	}
+
+	lock, err := os.ReadFile(filepath.Join(root, ".gitmemo", "lock.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lockText := string(lock)
+	if !strings.Contains(lockText, `"lock_version": 1`) || !strings.Contains(lockText, `"gitmemo_version": "v0.3.0"`) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) {
+		t.Fatalf("unexpected trust lock: %s", lock)
 	}
 
 	commands, err := os.ReadFile(filepath.Join(root, "docs", "USER_COMMANDS.md"))
@@ -55,8 +67,8 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflowText := string(workflow)
-	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@v0.2.0") || !strings.Contains(workflowText, "# Managed by GitMemo.") {
-		t.Fatalf("validation workflow is not read-only, managed, and release-pinned: %s", workflow)
+	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@v0.3.0") || !strings.Contains(workflowText, "trust version") || !strings.Contains(workflowText, "Stable bootstrap workflow v1") {
+		t.Fatalf("validation workflow is not the stable read-only trust bootstrap: %s", workflow)
 	}
 }
 

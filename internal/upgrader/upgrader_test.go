@@ -26,21 +26,20 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".gitmemo", "config.json"), configData, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Remove(filepath.Join(root, ".gitmemo", "lock.json")); err != nil {
+		t.Fatal(err)
+	}
 
 	workflowPath := filepath.Join(root, ".github", "workflows", "validate.yml")
-	workflow, err := os.ReadFile(workflowPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow = []byte(strings.ReplaceAll(string(workflow), "@"+buildinfo.ReleaseVersion, "@v0.1.0"))
-	workflow = []byte(strings.ReplaceAll(string(workflow), "# Managed by GitMemo. Updated by gitmemo upgrade.\n", ""))
-	if err := os.WriteFile(workflowPath, workflow, 0o644); err != nil {
+	oldWorkflow := "name: Validate GitMemo Memory\n\non:\n  push:\n  pull_request:\n\npermissions:\n  contents: read\n\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - name: Install pinned GitMemo CLI\n        run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@v0.1.0\n"
+	if err := os.WriteFile(workflowPath, []byte(oldWorkflow), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	extensionPath := filepath.Join(root, "docs", "EXTENDING_GITMEMO.md")
-	if err := os.Remove(extensionPath); err != nil {
-		t.Fatal(err)
+	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md"} {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	customPath := filepath.Join(root, "projects", "user-notes.md")
@@ -75,19 +74,29 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(config), `"contract_version": 4`) || !strings.Contains(string(config), `"gitmemo_version": "v0.2.0"`) {
+	if !strings.Contains(string(config), `"contract_version": 5`) || !strings.Contains(string(config), `"gitmemo_version": "v0.3.0"`) {
 		t.Fatalf("config not upgraded: %s", config)
 	}
 
-	workflow, err = os.ReadFile(workflowPath)
+	lock, err := os.ReadFile(filepath.Join(root, ".gitmemo", "lock.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(workflow), "@v0.2.0") || !strings.Contains(string(workflow), "# Managed by GitMemo.") {
-		t.Fatalf("workflow not upgraded: %s", workflow)
+	if !strings.Contains(string(lock), `"gitmemo_version": "v0.3.0"`) || !strings.Contains(string(lock), `"contract_sha256"`) {
+		t.Fatalf("trust lock not installed: %s", lock)
 	}
-	if _, err := os.Stat(extensionPath); err != nil {
-		t.Fatalf("extension contract not installed: %v", err)
+
+	workflow, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(workflow), "Stable bootstrap workflow v1") || !strings.Contains(string(workflow), "trust version") || !strings.Contains(string(workflow), "@v0.3.0") {
+		t.Fatalf("workflow not upgraded to stable bootstrap: %s", workflow)
+	}
+	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md"} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("contract file %s not installed: %v", rel, err)
+		}
 	}
 }
 
