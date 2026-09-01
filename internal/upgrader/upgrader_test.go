@@ -74,7 +74,8 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(config), `"contract_version": 5`) || !strings.Contains(string(config), `"gitmemo_version": "v0.3.0"`) {
+	versionField := `"gitmemo_version": "` + buildinfo.ReleaseVersion + `"`
+	if !strings.Contains(string(config), `"contract_version": 5`) || !strings.Contains(string(config), versionField) {
 		t.Fatalf("config not upgraded: %s", config)
 	}
 
@@ -82,7 +83,7 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(lock), `"gitmemo_version": "v0.3.0"`) || !strings.Contains(string(lock), `"contract_sha256"`) {
+	if !strings.Contains(string(lock), versionField) || !strings.Contains(string(lock), `"contract_sha256"`) {
 		t.Fatalf("trust lock not installed: %s", lock)
 	}
 
@@ -90,7 +91,7 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(workflow), "Stable bootstrap workflow v1") || !strings.Contains(string(workflow), "trust version") || !strings.Contains(string(workflow), "@v0.3.0") {
+	if !strings.Contains(string(workflow), "Stable bootstrap workflow v1") || !strings.Contains(string(workflow), "trust version") || !strings.Contains(string(workflow), "@"+buildinfo.BootstrapVerifierVersion) {
 		t.Fatalf("workflow not upgraded to stable bootstrap: %s", workflow)
 	}
 	for _, rel := range []string{"docs/EXTENDING_GITMEMO.md", "docs/TRUST_MODEL.md", "docs/SOURCES.md"} {
