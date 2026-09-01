@@ -19,6 +19,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		"schema/memory-item.schema.json",
 		"templates/open_loop.md",
 		".gitmemo/config.json",
+		".github/workflows/validate.yml",
 		"memories/.gitkeep",
 		"projects/.gitkeep",
 		"index/memories.jsonl",
@@ -35,7 +36,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(config), `"repository_format": 1`) || !strings.Contains(string(config), `"contract_version": 2`) {
+	if !strings.Contains(string(config), `"repository_format": 1`) || !strings.Contains(string(config), `"contract_version": 3`) {
 		t.Fatalf("unexpected config: %s", config)
 	}
 
@@ -43,8 +44,17 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(commands), "GitMemo: remember") || !strings.Contains(string(commands), "GitMemo: search") {
-		t.Fatalf("command contract missing remember/search interface: %s", commands)
+	if !strings.Contains(string(commands), "GitMemo: store") || !strings.Contains(string(commands), "GitMemo: search") {
+		t.Fatalf("command contract missing store/search interface: %s", commands)
+	}
+
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "validate.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflowText := string(workflow)
+	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@v0.1.0") {
+		t.Fatalf("validation workflow is not read-only and release-pinned: %s", workflow)
 	}
 }
 
