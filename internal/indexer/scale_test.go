@@ -13,13 +13,13 @@ import (
 )
 
 func TestSyntheticScale(t *testing.T) {
-	raw := os.Getenv("GITMEMO_SCALE_N")
+	raw := os.Getenv("RUNETHREAD_SCALE_N")
 	if raw == "" {
-		t.Skip("set GITMEMO_SCALE_N to run the synthetic scale test")
+		t.Skip("set RUNETHREAD_SCALE_N to run the synthetic scale test")
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 || n > 1_000_000 {
-		t.Fatalf("GITMEMO_SCALE_N must be an integer from 1 to 1000000, got %q", raw)
+		t.Fatalf("RUNETHREAD_SCALE_N must be an integer from 1 to 1000000, got %q", raw)
 	}
 
 	projects := make([]string, 100)
