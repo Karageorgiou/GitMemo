@@ -49,6 +49,14 @@ type termPosting struct {
 }
 
 func renderMachineIndexes(root string, records []memory.Record) (map[string][]byte, error) {
+	digest, err := memorySourceDigest(root, records)
+	if err != nil {
+		return nil, err
+	}
+	return renderMachineIndexesWithDigest(records, digest)
+}
+
+func renderMachineIndexesWithDigest(records []memory.Record, digest string) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	byID := map[string]map[string]indexEntry{}
 	byProject := map[string][]string{}
@@ -141,10 +149,6 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 		files["index/terms/"+bucket+".json"] = data
 	}
 
-	digest, err := memorySourceDigest(root, records)
-	if err != nil {
-		return nil, err
-	}
 	cat := catalog{
 		IndexVersion:               IndexVersion,
 		RecordCount:                len(records),
