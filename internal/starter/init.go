@@ -35,6 +35,7 @@ This repository contains memory data and a locally vendored copy of the operatio
 - ` + "`docs/USER_COMMANDS.md`" + ` — user-facing store/search command contract.
 - ` + "`docs/EXTENDING_GITMEMO.md`" + ` — rules for flexible categories versus core schema changes.
 - ` + "`docs/SOURCES.md`" + ` — reserved future integration boundary for external personal-data sources.
+- ` + "`docs/INDEX_FORMAT.md`" + ` — generated Index v2 layout, lookup routing, freshness, and fallback rules.
 - ` + "`schema/`" + ` — machine-readable memory schema.
 - ` + "`templates/`" + ` — authoring scaffolds for the eight core memory types.
 - ` + "`memories/`" + ` — canonical atomic durable memories.

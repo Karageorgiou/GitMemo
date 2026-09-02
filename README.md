@@ -166,7 +166,7 @@ The public implementation owns:
 - `internal/` — parsing, indexing, trust verification, validation, initialization, and upgrades;
 - `MEMORY_PROTOCOL.md` — canonical memory-operation protocol shipped in each release;
 - `schema/` — canonical memory schema;
-- `docs/` — format, taxonomy, trust, validation, extension, compatibility, and repository-role documentation;
+- `docs/` — format, taxonomy, index, trust, validation, extension, compatibility, and repository-role documentation;
 - `templates/` — authoring scaffolds for the eight core memory types;
 - `.github/workflows/validate.yml` — source CI;
 - `.github/workflows/release.yml` — protected PR-driven immutable release pipeline.
@@ -181,29 +181,48 @@ A generated private memory repository contains the pinned/vendored control contr
 gitmemo init [dir]
 gitmemo upgrade [root]
 gitmemo validate [--json] [root]
+gitmemo search [--root DIR] [--limit N] [--json] <query-or-uuid>
 gitmemo index --check [root]
 gitmemo index --write [root]
+gitmemo index --mark-stale [root]
 gitmemo trust version [root]
 gitmemo version
 ```
 
 `gitmemo init` creates a self-describing memory repository and refuses to overwrite a non-empty target.
 
+`gitmemo search` uses the deterministic generated Index v2. A full UUID is routed directly to its UUID shard; ordinary language uses the hash-sharded inverted term index. Search results are discovery metadata and point back to canonical atomic memory files.
+
+`gitmemo index --mark-stale` records that generated discovery data may be incomplete when a source write cannot immediately be followed by deterministic regeneration.
+
 `gitmemo trust version` is a deliberately small stable bootstrap command used by validation CI to resolve the official release pinned in `.gitmemo/lock.json`; the resolved release performs full validation.
 
 ---
 
-## Canonical data versus indexes
+## Canonical data versus Index v2
 
 Atomic Markdown/JSON memories and project source files are canonical data. `index/` is generated acceleration.
+
+Index v2 removes the single global `index/memories.jsonl` machine-index write hotspot. It uses:
+
+- `index/catalog.json` with the index version and deterministic memory-source digest;
+- UUID shards under `index/by-id/` for targeted exact lookup;
+- direct project/topic/tag/type/lifecycle/open-loop-status indexes;
+- uniformly hash-sharded inverted term postings for ordinary-language discovery;
+- the existing human project/open-loop/preference navigation views.
+
+This reduces full-catalog reads and unrelated Git conflicts while keeping every machine index reproducible from canonical memory metadata. The local indexer currently rebuilds the generated tree atomically; Git records only files whose resulting bytes changed.
 
 A stale index is a degraded-search condition, not destruction or invalidation of otherwise valid canonical memories:
 
 - `gitmemo validate` reports stale indexes as warnings;
 - `gitmemo index --check` remains the strict freshness gate;
-- an LLM that cannot run the indexer must treat stale indexes as incomplete, fall back to canonical files/repository search, and report that regeneration remains pending.
+- `index/STALE` is the explicit dirty marker for clients that cannot regenerate immediately;
+- an LLM that cannot run the indexer must treat stale or unknown-freshness indexes as incomplete and fall back to canonical files/repository search.
 
-This allows GitMemo to work with LLM clients that can read/write Git repositories but cannot execute local binaries.
+No SQLite server, vector database, embedding service, or paid backend is required. A future local SQLite/FTS cache may be added as disposable acceleration without changing canonical Git data.
+
+See [`docs/INDEX_FORMAT.md`](docs/INDEX_FORMAT.md).
 
 ---
 
