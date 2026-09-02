@@ -27,6 +27,7 @@ type catalogLayout struct {
 	ByLifecycle      string `json:"by_lifecycle"`
 	ByOpenLoopStatus string `json:"by_open_loop_status"`
 	Terms            string `json:"terms"`
+	TermPostings     string `json:"term_postings"`
 }
 
 type catalog struct {
@@ -35,12 +36,11 @@ type catalog struct {
 	MemorySourceSHA256         string        `json:"memory_source_sha256"`
 	IDShardPrefixCharacters    int           `json:"id_shard_prefix_characters"`
 	TermShardHashHexCharacters int           `json:"term_shard_hash_hex_characters"`
+	IDListChunkSize            int           `json:"id_list_chunk_size"`
+	TermPostingChunkSize       int           `json:"term_posting_chunk_size"`
+	MaxStoredTermPostings      int           `json:"max_stored_term_postings"`
 	TermFields                 []string      `json:"term_fields"`
 	Layout                     catalogLayout `json:"layout"`
-}
-
-type idList struct {
-	IDs []string `json:"ids"`
 }
 
 type termPosting struct {
@@ -120,6 +120,7 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 	}
 
 	for bucket, terms := range termShards {
+		rendered := make(map[string]termIndexValue, len(terms))
 		for term := range terms {
 			sort.Slice(terms[term], func(i, j int) bool {
 				if terms[term][i].Score != terms[term][j].Score {
@@ -127,8 +128,13 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 				}
 				return terms[term][i].ID < terms[term][j].ID
 			})
+			value, err := renderTermIndexValue(files, term, terms[term])
+			if err != nil {
+				return nil, err
+			}
+			rendered[term] = value
 		}
-		data, err := marshalLine(terms)
+		data, err := marshalLine(rendered)
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +151,9 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 		MemorySourceSHA256:         digest,
 		IDShardPrefixCharacters:    idShardPrefixCharacters,
 		TermShardHashHexCharacters: termShardHashHexCharacters,
+		IDListChunkSize:            idListChunkSize,
+		TermPostingChunkSize:       termPostingChunkSize,
+		MaxStoredTermPostings:      maxStoredTermPostings,
 		TermFields: []string{
 			"title", "aliases", "projects", "topics", "tags", "entities", "type", "lifecycle", "open_loop_status", "summary",
 		},
@@ -157,6 +166,7 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 			ByLifecycle:      "index/by-lifecycle/<lifecycle>.json",
 			ByOpenLoopStatus: "index/by-open-loop-status/<status>.json",
 			Terms:            "index/terms/<sha256-term-prefix>.json",
+			TermPostings:     "index/term-postings/<sha256-prefix>/<full-sha256>/<chunk>.json",
 		},
 	}
 	catalogData, err := json.MarshalIndent(cat, "", "  ")
@@ -185,11 +195,9 @@ func makeIndexEntry(m memory.Memory) indexEntry {
 func renderIDLists(files map[string][]byte, dir string, values map[string][]string) error {
 	for key, ids := range values {
 		sort.Strings(ids)
-		data, err := marshalLine(idList{IDs: ids})
-		if err != nil {
+		if err := renderChunkedIDList(files, dir, key, ids); err != nil {
 			return err
 		}
-		files[dir+"/"+key+".json"] = data
 	}
 	return nil
 }
@@ -257,9 +265,7 @@ func tokenize(text string) []string {
 }
 
 func termBucket(term string) string {
-	sum := sha256.Sum256([]byte(term))
-	hexsum := hex.EncodeToString(sum[:])
-	return hexsum[:termShardHashHexCharacters]
+	return termHash(term)[:termShardHashHexCharacters]
 }
 
 func idShardPrefix(id string) (string, error) {

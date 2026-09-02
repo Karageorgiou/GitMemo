@@ -18,6 +18,7 @@ The canonical memory remains the Markdown + JSON pair under `memories/`. If an i
 - `record_count` — number of indexed atomic memory sidecars;
 - `memory_source_sha256` — deterministic SHA-256 digest of the sorted memory-sidecar paths and bytes used to build the machine indexes;
 - sharding parameters;
+- ID-list and posting chunk sizes plus the maximum committed postings per term;
 - indexed term fields;
 - a human-readable description of the generated layout.
 
@@ -103,7 +104,7 @@ A direct index file has the form:
 
 IDs are sorted deterministically.
 
-These files allow project/topic/tag/type/status filtering without scanning every memory entry.
+These files allow project/topic/tag/type/status filtering without scanning every memory entry. A list of up to 1,024 UUIDs is stored inline in its descriptor. Larger lists are deterministically chunked into 1,024-ID files beneath a sibling directory named for the key, so a very large project, tag, lifecycle, or type never becomes one unbounded JSON blob. Reading the complete category remains O(number of matching IDs), which is unavoidable for an API that returns every match.
 
 ---
 
@@ -149,13 +150,13 @@ SHA-256(UTF-8 normalized term)
 
 The current prefix length is recorded in `catalog.json`. Hash sharding is used instead of visible-letter sharding so common linguistic prefixes do not concentrate most terms into a few files.
 
-Each shard is a JSON object from normalized term to postings. A posting contains:
+Each term shard is a JSON object from normalized term to a descriptor containing its exact `document_frequency` and either inline postings, chunk metadata, or `suppressed: true`. A posting contains:
 
 ```json
 {"id":"<uuid>","score":8}
 ```
 
-Postings are sorted by score descending and UUID ascending.
+Postings are sorted by score descending and UUID ascending. Up to 1,024 postings are stored inline. Larger posting lists are split into deterministic 1,024-posting files under `index/term-postings/<sha256-prefix>/<full-sha256>/`. A term with more than 32,768 matching memories retains its exact document frequency but its postings are intentionally suppressed: such a term is too broad to be a useful Git-native candidate set and the query must include a more specific term. This is language-independent and places a hard bound on committed postings for any one term.
 
 For a query, the reader computes the shard for each normalized query term, reads only those shard files, combines postings, then resolves the highest-ranked UUIDs through the relevant `by-id` shard(s).
 

@@ -84,7 +84,9 @@ func Search(root, query string, limit int) ([]SearchResult, error) {
 		matched map[string]bool
 	}
 	aggregates := map[string]*aggregate{}
-	termCache := map[string]map[string][]termPosting{}
+	termCache := map[string]map[string]termIndexValue{}
+	foundTerms := 0
+	suppressedTerms := 0
 	for _, term := range terms {
 		bucket := termBucket(term)
 		shard := termCache[bucket]
@@ -94,13 +96,26 @@ func Search(root, query string, limit int) ([]SearchResult, error) {
 				return nil, err
 			}
 			if !found {
-				termCache[bucket] = map[string][]termPosting{}
+				termCache[bucket] = map[string]termIndexValue{}
 				continue
 			}
 			shard = loaded
 			termCache[bucket] = shard
 		}
-		for _, posting := range shard[term] {
+		value, ok := shard[term]
+		if !ok {
+			continue
+		}
+		foundTerms++
+		if value.Suppressed {
+			suppressedTerms++
+			continue
+		}
+		postings, err := loadTermPostings(root, term, value)
+		if err != nil {
+			return nil, err
+		}
+		for _, posting := range postings {
 			a := aggregates[posting.ID]
 			if a == nil {
 				a = &aggregate{matched: map[string]bool{}}
@@ -109,6 +124,9 @@ func Search(root, query string, limit int) ([]SearchResult, error) {
 			a.score += posting.Score
 			a.matched[term] = true
 		}
+	}
+	if len(aggregates) == 0 && foundTerms > 0 && suppressedTerms == foundTerms {
+		return nil, fmt.Errorf("all matching query terms are high-frequency and intentionally have no committed posting lists; refine the query with a more specific term")
 	}
 
 	type ranked struct {
@@ -191,7 +209,7 @@ func idsForKey(root, directory, key string) ([]string, error) {
 	if err := json.Unmarshal(data, &list); err != nil {
 		return nil, fmt.Errorf("parse %s index %q: %w", directory, key, err)
 	}
-	return append([]string(nil), list.IDs...), nil
+	return loadChunkedIDList(root, directory, key, list)
 }
 
 func lookupEntry(root, id string, cache map[string]map[string]indexEntry) (indexEntry, bool, error) {
@@ -230,7 +248,7 @@ func lookupEntry(root, id string, cache map[string]map[string]indexEntry) (index
 	return entry, ok, nil
 }
 
-func loadTermShard(root, bucket string) (map[string][]termPosting, bool, error) {
+func loadTermShard(root, bucket string) (map[string]termIndexValue, bool, error) {
 	path := filepath.Join(root, "index", "terms", bucket+".json")
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -239,7 +257,7 @@ func loadTermShard(root, bucket string) (map[string][]termPosting, bool, error) 
 	if err != nil {
 		return nil, false, err
 	}
-	var shard map[string][]termPosting
+	var shard map[string]termIndexValue
 	if err := json.Unmarshal(data, &shard); err != nil {
 		return nil, false, fmt.Errorf("parse term shard %q: %w", bucket, err)
 	}
