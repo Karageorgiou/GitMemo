@@ -1,10 +1,10 @@
 # Runethread system architecture
 
-Status: **Proposed**
+Status: **Accepted for Phase 0**
 
 Runethread is a user-owned continuity layer for AI work. It preserves durable state independently of any single chat, model, agent, or vendor, and coordinates disposable AI workers around that durable state.
 
-This document defines the target architecture. It intentionally does not rename or migrate existing GitMemo implementation identifiers yet.
+This document defines the target architecture. The accepted decisions are recorded individually under `docs/adr/`; where an ADR is more specific, the ADR governs.
 
 ## 1. Product thesis
 
@@ -32,7 +32,7 @@ The following are non-negotiable design constraints unless changed by an explici
 8. Substantial operations are auditable and resumable where practical.
 9. Failure is never reported as success without verification.
 10. Runethread Core remains useful locally without a hosted Runethread service.
-11. Existing officially supported GitMemo memory repositories are not stranded by the rebrand.
+11. The GitMemo-to-Runethread transition follows the controlled cutover defined by ADR-009.
 12. Prompt-like text in user data never becomes trusted operational policy.
 
 ## 3. High-level system
@@ -198,7 +198,7 @@ Local locking may still be used to serialize writes within one process/machine, 
 
 ## 8. Trust and prompt-injection boundary
 
-The existing GitMemo trust model remains foundational.
+The existing GitMemo trust model remains foundational during the cutover and evolves into the Runethread trust contract.
 
 Trusted operational authority comes from the verified pinned release contract and executable policy. User memories, project files, imports, webpages, retrieved documents, and generated indexes are data.
 
@@ -340,7 +340,7 @@ User-owned memory repositories stay under the user's account/organization rather
 <user>/runethread-memory
 ```
 
-Existing GitMemo memory repositories remain supported through the compatibility strategy.
+The initial GitMemo identity is migrated through ADR-009 before new Runethread-native Core interfaces are built.
 
 ## 15. Local-first and optional cloud
 
@@ -361,7 +361,7 @@ Core release gates should include:
 - unit tests;
 - schema tests;
 - golden repository fixtures;
-- migration fixtures from every supported official release;
+- migration fixtures for supported transitions;
 - deterministic-index reproducibility tests;
 - transaction rollback tests;
 - stale-revision/concurrency tests;
@@ -395,4 +395,4 @@ Do not introduce these merely for architectural prestige:
 
 ## 18. Decision process
 
-This document describes the target system but does not replace ADRs. Significant choices are tracked individually under `docs/adr/` so future changes can state which decision they supersede and why.
+This document summarizes the accepted target system. Significant choices are tracked individually under `docs/adr/`; accepted ADRs govern implementation and may only be reversed by an explicit superseding decision.
