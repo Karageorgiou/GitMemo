@@ -16,7 +16,7 @@ import (
 
 const termShardHashHexCharacters = 3
 
-const idShardPrefixCharacters = 2
+const idShardPrefixCharacters = 3
 
 type catalogLayout struct {
 	ByID             string `json:"by_id"`
@@ -94,7 +94,11 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 		if err != nil {
 			return nil, err
 		}
-		files["index/by-id/"+prefix+".json"] = data
+		path, err := idShardPath(prefix)
+		if err != nil {
+			return nil, err
+		}
+		files[path] = data
 	}
 	if err := renderIDLists(files, "index/by-project", byProject); err != nil {
 		return nil, err
@@ -145,7 +149,7 @@ func renderMachineIndexes(root string, records []memory.Record) (map[string][]by
 			"title", "aliases", "projects", "topics", "tags", "entities", "type", "lifecycle", "open_loop_status", "summary",
 		},
 		Layout: catalogLayout{
-			ByID:             "index/by-id/<first-2-uuid-hex>.json",
+			ByID:             "index/by-id/<first-2-uuid-hex>/<third-uuid-hex>.json",
 			ByProject:        "index/by-project/<project-slug>.json",
 			ByTopic:          "index/by-topic/<topic-slug>.json",
 			ByTag:            "index/by-tag/<tag-slug>.json",
@@ -269,6 +273,13 @@ func idShardPrefix(id string) (string, error) {
 		}
 	}
 	return prefix, nil
+}
+
+func idShardPath(prefix string) (string, error) {
+	if len(prefix) != idShardPrefixCharacters {
+		return "", fmt.Errorf("invalid ID shard prefix length %d: %q", len(prefix), prefix)
+	}
+	return filepath.ToSlash(filepath.Join("index", "by-id", prefix[:2], prefix[2:]+".json")), nil
 }
 
 func memorySourceDigest(root string, records []memory.Record) (string, error) {

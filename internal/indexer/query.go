@@ -207,7 +207,11 @@ func lookupEntry(root, id string, cache map[string]map[string]indexEntry) (index
 		shard = cache[prefix]
 	}
 	if shard == nil {
-		path := filepath.Join(root, "index", "by-id", prefix+".json")
+		rel, err := idShardPath(prefix)
+		if err != nil {
+			return indexEntry{}, false, err
+		}
+		path := filepath.Join(root, filepath.FromSlash(rel))
 		data, err := os.ReadFile(path)
 		if os.IsNotExist(err) {
 			return indexEntry{}, false, nil

@@ -120,7 +120,7 @@ Do not begin by reading every memory in the repository.
 
 When the generated index is usable, route retrieval through the narrowest Index v2 entry point described in `docs/INDEX_FORMAT.md`:
 
-1. for a known full memory UUID, compute its first two hexadecimal characters and read only `index/by-id/<prefix>.json`;
+1. for a known full memory UUID, use its first three hexadecimal characters and read only the nested 12-bit shard `index/by-id/<first-two>/<third>.json`;
 2. for a known project, topic, tag, memory type, lifecycle, or open-loop status, read the corresponding direct metadata index file;
 3. for ordinary natural-language discovery, use `gitmemo search` when execution-capable tooling is available, or compute the required deterministic term shard(s) from the Index v2 contract;
 4. resolve candidate UUIDs through the necessary `by-id` shard(s); and

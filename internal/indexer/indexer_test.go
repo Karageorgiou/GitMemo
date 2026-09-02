@@ -84,8 +84,8 @@ func TestGenerateUsesShardedIndexV2(t *testing.T) {
 	}
 	for _, path := range []string{
 		"index/catalog.json",
-		"index/by-id/11.json",
-		"index/by-id/22.json",
+		"index/by-id/11/1.json",
+		"index/by-id/22/2.json",
 		"index/by-project/test.json",
 		"index/by-topic/topic.json",
 		"index/by-tag/tag.json",
@@ -109,11 +109,24 @@ func TestGenerateUsesShardedIndexV2(t *testing.T) {
 	}
 
 	var shard map[string]indexEntry
-	if err := json.Unmarshal(r.Files["index/by-id/11.json"], &shard); err != nil {
+	if err := json.Unmarshal(r.Files["index/by-id/11/1.json"], &shard); err != nil {
 		t.Fatal(err)
 	}
 	if shard["11111111-1111-4111-8111-111111111111"].Title != "Memory a" {
 		t.Fatalf("unexpected ID shard: %#v", shard)
+	}
+}
+
+func TestIDShardPathUsesTwelveBitsAndNestedDirectories(t *testing.T) {
+	if idShardPrefixCharacters != 3 {
+		t.Fatalf("ID sharding must use 3 hex characters / 12 bits, got %d", idShardPrefixCharacters)
+	}
+	path, err := idShardPath("9f2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "index/by-id/9f/2.json" {
+		t.Fatalf("unexpected 12-bit shard path: %s", path)
 	}
 }
 
