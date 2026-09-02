@@ -2,7 +2,7 @@
 
 Runethread uses Architecture Decision Records (ADRs) for durable architectural choices that affect compatibility, trust, security, state ownership, or component boundaries.
 
-The Phase 0 architecture documents describe the proposed target system. The ADRs below should be accepted individually before implementation relies on them.
+The Phase 0 architecture documents describe the target system. The decisions below were reviewed and accepted before implementation begins.
 
 ## Status values
 
@@ -13,22 +13,22 @@ The Phase 0 architecture documents describe the proposed target system. The ADRs
 
 ## Phase 0 decision catalog
 
-| ADR | Decision | Initial status |
+| ADR | Decision | Status |
 | --- | --- | --- |
-| ADR-001 | Canonical state ownership | Proposed |
-| ADR-002 | Deterministic Core and semantic AI boundary | Proposed |
-| ADR-003 | Two-phase memory mutation protocol | Proposed |
-| ADR-004 | Git-revision optimistic concurrency | Proposed |
-| ADR-005 | Core and Orchestrator are separate components/repositories | Proposed |
-| ADR-006 | Capability-based worker abstraction | Proposed |
-| ADR-007 | Isolated Git worktrees for delegated code mutation | Proposed |
-| ADR-008 | Least-privilege permission and approval model | Proposed |
-| ADR-009 | GitMemo-to-Runethread compatibility strategy | Proposed |
-| ADR-010 | Runethread organization and repository topology | Proposed |
+| [ADR-001](ADR-001-canonical-state-ownership.md) | Canonical state ownership | Accepted |
+| [ADR-002](ADR-002-deterministic-core-semantic-ai.md) | Deterministic Core and semantic AI boundary | Accepted |
+| [ADR-003](ADR-003-two-phase-memory-mutations.md) | Two-phase memory mutation protocol | Accepted |
+| [ADR-004](ADR-004-git-optimistic-concurrency.md) | Git-revision optimistic concurrency | Accepted |
+| [ADR-005](ADR-005-core-orchestrator-separation.md) | Core and Orchestrator are separate components/repositories | Accepted |
+| [ADR-006](ADR-006-capability-based-workers.md) | Capability-based worker abstraction | Accepted |
+| [ADR-007](ADR-007-isolated-git-worktrees.md) | Isolated Git worktrees for delegated code mutation | Accepted |
+| [ADR-008](ADR-008-permissions-and-approvals.md) | Least-privilege permission and approval model | Accepted |
+| [ADR-009](ADR-009-controlled-runethread-cutover.md) | Controlled GitMemo-to-Runethread cutover | Accepted |
+| [ADR-010](ADR-010-organization-repository-topology.md) | Runethread organization and repository topology | Accepted |
 
 ## ADR format
 
-Each ADR should contain:
+Each ADR contains:
 
 ```text
 # ADR-NNN: title
@@ -57,4 +57,4 @@ How can implementation/tests demonstrate compliance?
 1. ADRs record architectural decisions, not ordinary implementation details.
 2. Accepted ADRs should not be silently edited to reverse their meaning; supersede them with a new ADR.
 3. Compatibility- or security-affecting code changes should cite the relevant ADR in the PR/commit description.
-4. The current implementation remains governed by existing GitMemo release contracts until a Runethread migration decision is actually implemented and released.
+4. The current implementation remains governed by existing GitMemo release contracts until the controlled Runethread cutover in ADR-009 is actually implemented and released.
