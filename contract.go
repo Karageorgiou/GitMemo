@@ -1,4 +1,4 @@
-package gitmemo
+package runethread
 
 import "embed"
 

@@ -1,38 +1,38 @@
 {
   "bootstrap_protocol": 1,
-  "project": "GitMemo",
-  "canonical_repository": "Karageorgiou/GitMemo",
+  "project": "Runethread",
+  "canonical_repository": "runethread/core",
   "setup_instructions": "AI_SETUP.md",
   "template": {
-    "repository": "Karageorgiou/GitMemo-template",
-    "default_memory_repository_name": "GitMemo-memory",
+    "repository": "runethread/memory-template",
+    "default_memory_repository_name": "runethread-memory",
     "required_visibility": "private",
-    "create_url": "https://github.com/new?owner=%40me&name=GitMemo-memory&visibility=private&template_owner=Karageorgiou&template_name=GitMemo-template"
+    "create_url": "https://github.com/new?owner=%40me&name=runethread-memory&visibility=private&template_owner=runethread&template_name=memory-template"
   },
   "discovery": {
-    "repository_name_hint": "GitMemo-memory",
+    "repository_name_hint": "runethread-memory",
     "required_paths": [
-      ".gitmemo/config.json",
-      ".gitmemo/lock.json",
+      ".runethread/config.json",
+      ".runethread/lock.json",
       "MEMORY_PROTOCOL.md",
       "memories",
       "projects"
     ]
   },
   "release": {
-    "repository": "Karageorgiou/GitMemo",
+    "repository": "runethread/core",
     "strategy": "latest-stable-official-release",
     "template_is_release_pinned": true,
     "existing_repositories_upgrade_explicitly": true
   },
   "commands": {
-    "store": "GitMemo: store ...",
-    "search": "GitMemo: search ..."
+    "store": "Runethread: store ...",
+    "search": "Runethread: search ..."
   },
   "security": {
     "personal_data_allowed_in_canonical_repository": false,
     "personal_data_allowed_in_template_repository": false,
     "memory_repository_must_be_private_before_personal_writes": true,
-    "request_pasted_credentials": false
+    "request_credentials": false
   }
 }
