@@ -1,0 +1,87 @@
+name: Patch Index v2 ID Hash Once
+
+on:
+  push:
+    branches:
+      - feat/index-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Hash UUIDs before shard selection
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'pattern not found in {path}: {old[:140]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          replace_once('internal/indexer/machine.go', 'const idShardPrefixCharacters = 3', 'const idShardHashHexCharacters = 3')
+          replace_once(
+              'internal/indexer/machine.go',
+              'IDShardPrefixCharacters    int           `json:"id_shard_prefix_characters"`',
+              'IDShardHashHexCharacters   int           `json:"id_shard_hash_hex_characters"`',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              'IDShardPrefixCharacters:    idShardPrefixCharacters,',
+              'IDShardHashHexCharacters:   idShardHashHexCharacters,',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              'ByID:             "index/by-id/<first-2-uuid-hex>/<third-uuid-hex>.json",',
+              'ByID:             "index/by-id/<first-2-sha256-hex>/<third-sha256-hex>.json",',
+          )
+          old = '''func idShardPrefix(id string) (string, error) {\n\tif len(id) < idShardPrefixCharacters {\n\t\treturn "", fmt.Errorf("memory UUID is too short for index sharding: %q", id)\n\t}\n\tprefix := strings.ToLower(id[:idShardPrefixCharacters])\n\tfor _, r := range prefix {\n\t\tif !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {\n\t\t\treturn "", fmt.Errorf("memory UUID has invalid shard prefix: %q", id)\n\t\t}\n\t}\n\treturn prefix, nil\n}\n\nfunc idShardPath(prefix string) (string, error) {\n\tif len(prefix) != idShardPrefixCharacters {\n\t\treturn "", fmt.Errorf("invalid ID shard prefix length %d: %q", len(prefix), prefix)\n\t}\n\treturn filepath.ToSlash(filepath.Join("index", "by-id", prefix[:2], prefix[2:]+".json")), nil\n}'''
+          new = '''func idShardPrefix(id string) (string, error) {\n\tid = strings.ToLower(strings.TrimSpace(id))\n\tif id == "" {\n\t\treturn "", fmt.Errorf("memory UUID is empty")\n\t}\n\thash := termHash(id)\n\treturn hash[:idShardHashHexCharacters], nil\n}\n\nfunc idShardPath(prefix string) (string, error) {\n\tif len(prefix) != idShardHashHexCharacters {\n\t\treturn "", fmt.Errorf("invalid ID shard hash prefix length %d: %q", len(prefix), prefix)\n\t}\n\treturn filepath.ToSlash(filepath.Join("index", "by-id", prefix[:2], prefix[2:]+".json")), nil\n}'''
+          replace_once('internal/indexer/machine.go', old, new)
+
+          p = Path('internal/indexer/indexer_test.go')
+          s = p.read_text()
+          s = s.replace('''\tfor _, path := range []string{\n\t\t"index/catalog.json",\n\t\t"index/by-id/11/1.json",\n\t\t"index/by-id/22/2.json",''', '''\tidA := "11111111-1111-4111-8111-111111111111"\n\tidB := "22222222-2222-4222-8222-222222222222"\n\tprefixA, _ := idShardPrefix(idA)\n\tprefixB, _ := idShardPrefix(idB)\n\tpathA, _ := idShardPath(prefixA)\n\tpathB, _ := idShardPath(prefixB)\n\tfor _, path := range []string{\n\t\t"index/catalog.json",\n\t\tpathA,\n\t\tpathB,''')
+          s = s.replace('''\tif err := json.Unmarshal(r.Files["index/by-id/11/1.json"], &shard); err != nil {''', '''\tif err := json.Unmarshal(r.Files[pathA], &shard); err != nil {''')
+          s = s.replace('''\tif idShardPrefixCharacters != 3 {\n\t\tt.Fatalf("ID sharding must use 3 hex characters / 12 bits, got %d", idShardPrefixCharacters)\n\t}''', '''\tif idShardHashHexCharacters != 3 {\n\t\tt.Fatalf("ID sharding must use 3 SHA-256 hex characters / 12 bits, got %d", idShardHashHexCharacters)\n\t}''')
+          marker = '''func TestOpenLoopsExcludeResolved(t *testing.T) {'''
+          test = '''func TestIDShardPrefixHashesWholeUUID(t *testing.T) {\n\tid := "11111111-1111-4111-8111-111111111111"\n\tprefix, err := idShardPrefix(id)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\texpected := termHash(id)[:idShardHashHexCharacters]\n\tif prefix != expected {\n\t\tt.Fatalf("UUID shard prefix %s does not match SHA-256 prefix %s", prefix, expected)\n\t}\n\tif prefix == id[:3] {\n\t\tt.Fatal("UUID sharding must not depend on the UUID's visible prefix")\n\t}\n}\n\n'''
+          if marker not in s:
+              raise SystemExit('test insertion marker not found')
+          s = s.replace(marker, test + marker, 1)
+          p.write_text(s)
+
+          p = Path('MEMORY_PROTOCOL.md')
+          s = p.read_text()
+          old = 'for a known full memory UUID, use its first three hexadecimal characters and read only the nested 12-bit shard `index/by-id/<first-two>/<third>.json`;'
+          new = 'for a known full memory UUID, compute SHA-256 over the lowercase full UUID, use the first three hexadecimal hash characters, and read only the nested 12-bit shard `index/by-id/<first-two-hash>/<third-hash>.json`;'
+          if old not in s:
+              raise SystemExit('MEMORY_PROTOCOL UUID shard text not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('docs/INDEX_FORMAT.md')
+          s = p.read_text()
+          s = s.replace('A UUID is assigned to an ID shard using its first three hexadecimal characters (12 bits). The first two characters select a directory and the third selects the shard file:', 'A UUID is assigned to an ID shard by computing SHA-256 over the lowercase full UUID and using the first three hexadecimal hash characters (12 bits). The first two hash characters select a directory and the third selects the shard file:')
+          s = s.replace('<uuid> -> index/by-id/<first-two-uuid-hex>/<third-uuid-hex>.json', '<uuid> -> SHA-256(lowercase uuid) -> index/by-id/<first-two-hash-hex>/<third-hash-hex>.json')
+          s = s.replace('At most 4096 ID shard files are possible with the current three-hex-character / 12-bit prefix, distributed beneath at most 256 first-level directories.', 'At most 4096 ID shard files are possible with the current three-hex-character / 12-bit SHA-256 prefix, distributed beneath at most 256 first-level directories. Hashing the complete UUID keeps shard distribution uniform even if a valid UUID producer has biased or sequential visible prefixes.')
+          p.write_text(s)
+          PY
+          gofmt -w internal/indexer/machine.go internal/indexer/indexer_test.go
+          go test ./...
+          go vet ./...
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/indexer/machine.go internal/indexer/indexer_test.go MEMORY_PROTOCOL.md docs/INDEX_FORMAT.md
+          git commit -m "perf: hash UUIDs before 12-bit shard selection"
+          git push
