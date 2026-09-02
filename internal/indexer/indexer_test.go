@@ -82,10 +82,16 @@ func TestGenerateUsesShardedIndexV2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	idA := "11111111-1111-4111-8111-111111111111"
+	idB := "22222222-2222-4222-8222-222222222222"
+	prefixA, _ := idShardPrefix(idA)
+	prefixB, _ := idShardPrefix(idB)
+	pathA, _ := idShardPath(prefixA)
+	pathB, _ := idShardPath(prefixB)
 	for _, path := range []string{
 		"index/catalog.json",
-		"index/by-id/11/1.json",
-		"index/by-id/22/2.json",
+		pathA,
+		pathB,
 		"index/by-project/test.json",
 		"index/by-topic/topic.json",
 		"index/by-tag/tag.json",
@@ -109,7 +115,7 @@ func TestGenerateUsesShardedIndexV2(t *testing.T) {
 	}
 
 	var shard map[string]indexEntry
-	if err := json.Unmarshal(r.Files["index/by-id/11/1.json"], &shard); err != nil {
+	if err := json.Unmarshal(r.Files[pathA], &shard); err != nil {
 		t.Fatal(err)
 	}
 	if shard["11111111-1111-4111-8111-111111111111"].Title != "Memory a" {
@@ -118,8 +124,8 @@ func TestGenerateUsesShardedIndexV2(t *testing.T) {
 }
 
 func TestIDShardPathUsesTwelveBitsAndNestedDirectories(t *testing.T) {
-	if idShardPrefixCharacters != 3 {
-		t.Fatalf("ID sharding must use 3 hex characters / 12 bits, got %d", idShardPrefixCharacters)
+	if idShardHashHexCharacters != 3 {
+		t.Fatalf("ID sharding must use 3 SHA-256 hex characters / 12 bits, got %d", idShardHashHexCharacters)
 	}
 	path, err := idShardPath("9f2")
 	if err != nil {
@@ -127,6 +133,21 @@ func TestIDShardPathUsesTwelveBitsAndNestedDirectories(t *testing.T) {
 	}
 	if path != "index/by-id/9f/2.json" {
 		t.Fatalf("unexpected 12-bit shard path: %s", path)
+	}
+}
+
+func TestIDShardPrefixHashesWholeUUID(t *testing.T) {
+	id := "11111111-1111-4111-8111-111111111111"
+	prefix, err := idShardPrefix(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := termHash(id)[:idShardHashHexCharacters]
+	if prefix != expected {
+		t.Fatalf("UUID shard prefix %s does not match SHA-256 prefix %s", prefix, expected)
+	}
+	if prefix == id[:3] {
+		t.Fatal("UUID sharding must not depend on the UUID's visible prefix")
 	}
 }
 

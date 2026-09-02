@@ -71,15 +71,15 @@ The entire `index/` directory is generated output. `gitmemo index --write` is al
 
 ## Exact ID lookup
 
-A UUID is assigned to an ID shard using its first three hexadecimal characters (12 bits). The first two characters select a directory and the third selects the shard file:
+A UUID is assigned to an ID shard by computing SHA-256 over the lowercase full UUID and using the first three hexadecimal hash characters (12 bits). The first two hash characters select a directory and the third selects the shard file:
 
 ```text
-<uuid> -> index/by-id/<first-two-uuid-hex>/<third-uuid-hex>.json
+<uuid> -> SHA-256(lowercase uuid) -> index/by-id/<first-two-hash-hex>/<third-hash-hex>.json
 ```
 
 Each ID shard is a JSON object whose keys are full memory UUIDs and whose values contain retrieval metadata such as title, type, lifecycle, summary, taxonomy, provenance basis, relationships, content path, and sensitivity.
 
-At most 4096 ID shard files are possible with the current three-hex-character / 12-bit prefix, distributed beneath at most 256 first-level directories. A reader that already knows a UUID therefore opens one deterministic shard instead of scanning a repository-wide catalog.
+At most 4096 ID shard files are possible with the current three-hex-character / 12-bit SHA-256 prefix, distributed beneath at most 256 first-level directories. Hashing the complete UUID keeps shard distribution uniform even if a valid UUID producer has biased or sequential visible prefixes. A reader that already knows a UUID therefore opens one deterministic shard instead of scanning a repository-wide catalog.
 
 With respect to total repository size, lookup requires a constant number of shard-path calculations and file reads. At one million uniformly distributed UUIDv4 memories, the expected average is about 244 records per ID shard instead of about 3906 with an 8-bit/256-shard layout. Actual latency still depends on filesystem, Git provider, network, record size, and distribution.
 
