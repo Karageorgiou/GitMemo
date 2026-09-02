@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/Karageorgiou/GitMemo/internal/memory"
+	"github.com/runethread/core/internal/memory"
 )
 
 const termShardHashHexCharacters = 3

@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	gitmemo "github.com/Karageorgiou/GitMemo"
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
-	"github.com/Karageorgiou/GitMemo/internal/trust"
+	gitmemo "github.com/runethread/core"
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/indexer"
+	"github.com/runethread/core/internal/trust"
 )
 
 const memoryRepoReadmeTemplate = `# GitMemo Memory

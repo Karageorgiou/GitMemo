@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
-	"github.com/Karageorgiou/GitMemo/internal/starter"
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/starter"
 )
 
 func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
@@ -43,9 +43,6 @@ func TestApplyUpgradesV010RepositoryAndPreservesUserData(t *testing.T) {
 		}
 	}
 
-	// Recreate the generated-index shape used by early GitMemo releases so the
-	// upgrade test proves obsolete v1 files are removed rather than merely
-	// upgrading a repository that was initialized by the current binary.
 	indexDir := filepath.Join(root, "index")
 	if err := os.RemoveAll(indexDir); err != nil {
 		t.Fatal(err)

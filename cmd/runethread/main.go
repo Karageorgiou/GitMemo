@@ -8,12 +8,12 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
-	"github.com/Karageorgiou/GitMemo/internal/starter"
-	"github.com/Karageorgiou/GitMemo/internal/trust"
-	"github.com/Karageorgiou/GitMemo/internal/upgrader"
-	"github.com/Karageorgiou/GitMemo/internal/validation"
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/indexer"
+	"github.com/runethread/core/internal/starter"
+	"github.com/runethread/core/internal/trust"
+	"github.com/runethread/core/internal/upgrader"
+	"github.com/runethread/core/internal/validation"
 )
 
 func main() { os.Exit(run(os.Args[1:])) }

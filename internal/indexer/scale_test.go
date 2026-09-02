@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Karageorgiou/GitMemo/internal/memory"
+	"github.com/runethread/core/internal/memory"
 )
 
 func TestSyntheticScale(t *testing.T) {

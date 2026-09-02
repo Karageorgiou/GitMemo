@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
+	"github.com/runethread/core/internal/buildinfo"
 )
 
 func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
+	"github.com/runethread/core/internal/indexer"
 )
 
 func runSearch(args []string) int {

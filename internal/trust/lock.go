@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strconv"
 
-	gitmemo "github.com/Karageorgiou/GitMemo"
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
+	gitmemo "github.com/runethread/core"
+	"github.com/runethread/core/internal/buildinfo"
 )
 
 const sourceRepository = "Karageorgiou/GitMemo"

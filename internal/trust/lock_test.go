@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	gitmemo "github.com/Karageorgiou/GitMemo"
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
+	gitmemo "github.com/runethread/core"
+	"github.com/runethread/core/internal/buildinfo"
 )
 
 func TestExpectedLockCoversContractPaths(t *testing.T) {

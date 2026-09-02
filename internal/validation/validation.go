@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
-	"github.com/Karageorgiou/GitMemo/internal/memory"
-	"github.com/Karageorgiou/GitMemo/internal/trust"
+	"github.com/runethread/core/internal/indexer"
+	"github.com/runethread/core/internal/memory"
+	"github.com/runethread/core/internal/trust"
 )
 
 type Issue struct {

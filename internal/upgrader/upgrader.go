@@ -10,12 +10,12 @@ import (
 	"sort"
 	"strings"
 
-	gitmemo "github.com/Karageorgiou/GitMemo"
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
-	"github.com/Karageorgiou/GitMemo/internal/starter"
-	"github.com/Karageorgiou/GitMemo/internal/trust"
-	"github.com/Karageorgiou/GitMemo/internal/validation"
+	gitmemo "github.com/runethread/core"
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/indexer"
+	"github.com/runethread/core/internal/starter"
+	"github.com/runethread/core/internal/trust"
+	"github.com/runethread/core/internal/validation"
 )
 
 type repositoryConfig struct {

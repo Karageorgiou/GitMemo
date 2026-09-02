@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
-	"github.com/Karageorgiou/GitMemo/internal/memory"
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/memory"
 )
 
 const IndexVersion = buildinfo.IndexFormatVersion
