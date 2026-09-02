@@ -1,0 +1,140 @@
+name: Patch Index v2 Bounds Once
+
+on:
+  push:
+    branches:
+      - feat/index-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Apply bounded list and posting architecture
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'pattern not found in {path}: {old[:140]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          # machine.go: self-describing limits and chunked rendering.
+          replace_once(
+              'internal/indexer/machine.go',
+              '''\tTerms            string `json:"terms"`\n}''',
+              '''\tTerms            string `json:"terms"`\n\tTermPostings     string `json:"term_postings"`\n}''',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''\tTermShardHashHexCharacters int           `json:"term_shard_hash_hex_characters"`\n\tTermFields                 []string      `json:"term_fields"`''',
+              '''\tTermShardHashHexCharacters int           `json:"term_shard_hash_hex_characters"`\n\tIDListChunkSize            int           `json:"id_list_chunk_size"`\n\tTermPostingChunkSize       int           `json:"term_posting_chunk_size"`\n\tMaxStoredTermPostings      int           `json:"max_stored_term_postings"`\n\tTermFields                 []string      `json:"term_fields"`''',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''type idList struct {\n\tIDs []string `json:"ids"`\n}\n\n''',
+              '',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''\tfor bucket, terms := range termShards {\n\t\tfor term := range terms {\n\t\t\tsort.Slice(terms[term], func(i, j int) bool {\n\t\t\t\tif terms[term][i].Score != terms[term][j].Score {\n\t\t\t\t\treturn terms[term][i].Score > terms[term][j].Score\n\t\t\t\t}\n\t\t\t\treturn terms[term][i].ID < terms[term][j].ID\n\t\t\t})\n\t\t}\n\t\tdata, err := marshalLine(terms)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tfiles["index/terms/"+bucket+".json"] = data\n\t}''',
+              '''\tfor bucket, terms := range termShards {\n\t\trendered := make(map[string]termIndexValue, len(terms))\n\t\tfor term := range terms {\n\t\t\tsort.Slice(terms[term], func(i, j int) bool {\n\t\t\t\tif terms[term][i].Score != terms[term][j].Score {\n\t\t\t\t\treturn terms[term][i].Score > terms[term][j].Score\n\t\t\t\t}\n\t\t\t\treturn terms[term][i].ID < terms[term][j].ID\n\t\t\t})\n\t\t\tvalue, err := renderTermIndexValue(files, term, terms[term])\n\t\t\tif err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t\trendered[term] = value\n\t\t}\n\t\tdata, err := marshalLine(rendered)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tfiles["index/terms/"+bucket+".json"] = data\n\t}''',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''\t\tTermShardHashHexCharacters: termShardHashHexCharacters,\n\t\tTermFields: []string{''',
+              '''\t\tTermShardHashHexCharacters: termShardHashHexCharacters,\n\t\tIDListChunkSize:            idListChunkSize,\n\t\tTermPostingChunkSize:       termPostingChunkSize,\n\t\tMaxStoredTermPostings:      maxStoredTermPostings,\n\t\tTermFields: []string{''',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''\t\t\tTerms:            "index/terms/<sha256-term-prefix>.json",\n\t\t},''',
+              '''\t\t\tTerms:            "index/terms/<sha256-term-prefix>.json",\n\t\t\tTermPostings:     "index/term-postings/<sha256-prefix>/<full-sha256>/<chunk>.json",\n\t\t},''',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''func renderIDLists(files map[string][]byte, dir string, values map[string][]string) error {\n\tfor key, ids := range values {\n\t\tsort.Strings(ids)\n\t\tdata, err := marshalLine(idList{IDs: ids})\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tfiles[dir+"/"+key+".json"] = data\n\t}\n\treturn nil\n}''',
+              '''func renderIDLists(files map[string][]byte, dir string, values map[string][]string) error {\n\tfor key, ids := range values {\n\t\tsort.Strings(ids)\n\t\tif err := renderChunkedIDList(files, dir, key, ids); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}''',
+          )
+          replace_once(
+              'internal/indexer/machine.go',
+              '''func termBucket(term string) string {\n\tsum := sha256.Sum256([]byte(term))\n\thexsum := hex.EncodeToString(sum[:])\n\treturn hexsum[:termShardHashHexCharacters]\n}''',
+              '''func termBucket(term string) string {\n\treturn termHash(term)[:termShardHashHexCharacters]\n}''',
+          )
+
+          # query.go: understand descriptors/chunks and skip intentionally suppressed terms.
+          replace_once(
+              'internal/indexer/query.go',
+              '''\taggregates := map[string]*aggregate{}\n\ttermCache := map[string]map[string][]termPosting{}\n\tfor _, term := range terms {''',
+              '''\taggregates := map[string]*aggregate{}\n\ttermCache := map[string]map[string]termIndexValue{}\n\tfoundTerms := 0\n\tsuppressedTerms := 0\n\tfor _, term := range terms {''',
+          )
+          replace_once(
+              'internal/indexer/query.go',
+              '''\t\t\tif !found {\n\t\t\t\ttermCache[bucket] = map[string][]termPosting{}\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tshard = loaded\n\t\t\ttermCache[bucket] = shard\n\t\t}\n\t\tfor _, posting := range shard[term] {''',
+              '''\t\t\tif !found {\n\t\t\t\ttermCache[bucket] = map[string]termIndexValue{}\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tshard = loaded\n\t\t\ttermCache[bucket] = shard\n\t\t}\n\t\tvalue, ok := shard[term]\n\t\tif !ok {\n\t\t\tcontinue\n\t\t}\n\t\tfoundTerms++\n\t\tif value.Suppressed {\n\t\t\tsuppressedTerms++\n\t\t\tcontinue\n\t\t}\n\t\tpostings, err := loadTermPostings(root, term, value)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tfor _, posting := range postings {''',
+          )
+          replace_once(
+              'internal/indexer/query.go',
+              '''\t}\n\n\ttype ranked struct {''',
+              '''\t}\n\tif len(aggregates) == 0 && foundTerms > 0 && suppressedTerms == foundTerms {\n\t\treturn nil, fmt.Errorf("all matching query terms are high-frequency and intentionally have no committed posting lists; refine the query with a more specific term")\n\t}\n\n\ttype ranked struct {''',
+          )
+          replace_once(
+              'internal/indexer/query.go',
+              '''\tvar list idList\n\tif err := json.Unmarshal(data, &list); err != nil {\n\t\treturn nil, fmt.Errorf("parse %s index %q: %w", directory, key, err)\n\t}\n\treturn append([]string(nil), list.IDs...), nil''',
+              '''\tvar list idList\n\tif err := json.Unmarshal(data, &list); err != nil {\n\t\treturn nil, fmt.Errorf("parse %s index %q: %w", directory, key, err)\n\t}\n\treturn loadChunkedIDList(root, directory, key, list)''',
+          )
+          replace_once(
+              'internal/indexer/query.go',
+              '''func loadTermShard(root, bucket string) (map[string][]termPosting, bool, error) {''',
+              '''func loadTermShard(root, bucket string) (map[string]termIndexValue, bool, error) {''',
+          )
+          replace_once(
+              'internal/indexer/query.go',
+              '''\tvar shard map[string][]termPosting\n\tif err := json.Unmarshal(data, &shard); err != nil {''',
+              '''\tvar shard map[string]termIndexValue\n\tif err := json.Unmarshal(data, &shard); err != nil {''',
+          )
+
+          # Format docs: hard bounds are part of the portable contract.
+          p = Path('docs/INDEX_FORMAT.md')
+          s = p.read_text()
+          anchor = '''Each shard is a JSON object from normalized term to postings. A posting contains:\n\n```json\n{"id":"<uuid>","score":8}\n```\n\nPostings are sorted by score descending and UUID ascending.'''
+          replacement = '''Each term shard is a JSON object from normalized term to a descriptor containing its exact `document_frequency` and either inline postings, chunk metadata, or `suppressed: true`. A posting contains:\n\n```json\n{"id":"<uuid>","score":8}\n```\n\nPostings are sorted by score descending and UUID ascending. Up to 1,024 postings are stored inline. Larger posting lists are split into deterministic 1,024-posting files under `index/term-postings/<sha256-prefix>/<full-sha256>/`. A term with more than 32,768 matching memories retains its exact document frequency but its postings are intentionally suppressed: such a term is too broad to be a useful Git-native candidate set and the query must include a more specific term. This is language-independent and places a hard bound on committed postings for any one term.'''
+          if anchor not in s:
+              raise SystemExit('INDEX_FORMAT term descriptor anchor not found')
+          s = s.replace(anchor, replacement, 1)
+          anchor = '''These files allow project/topic/tag/type/status filtering without scanning every memory entry.'''
+          replacement = '''These files allow project/topic/tag/type/status filtering without scanning every memory entry. A list of up to 1,024 UUIDs is stored inline in its descriptor. Larger lists are deterministically chunked into 1,024-ID files beneath a sibling directory named for the key, so a very large project, tag, lifecycle, or type never becomes one unbounded JSON blob. Reading the complete category remains O(number of matching IDs), which is unavoidable for an API that returns every match.'''
+          if anchor not in s:
+              raise SystemExit('INDEX_FORMAT direct index anchor not found')
+          s = s.replace(anchor, replacement, 1)
+          anchor = '''- sharding parameters;\n- indexed term fields;'''
+          replacement = '''- sharding parameters;\n- ID-list and posting chunk sizes plus the maximum committed postings per term;\n- indexed term fields;'''
+          if anchor not in s:
+              raise SystemExit('INDEX_FORMAT catalog anchor not found')
+          p.write_text(s.replace(anchor, replacement, 1))
+          PY
+
+          gofmt -w internal/indexer/chunks.go internal/indexer/machine.go internal/indexer/query.go
+          go test ./...
+          go vet ./...
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/indexer/chunks.go internal/indexer/machine.go internal/indexer/query.go docs/INDEX_FORMAT.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "perf: bound large Index v2 posting and ID lists"
+            git push
+          fi
