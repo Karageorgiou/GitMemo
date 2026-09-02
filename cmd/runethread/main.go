@@ -70,7 +70,7 @@ func runInit(args []string) int {
 		fmt.Fprintln(os.Stderr, "init failed:", err)
 		return 1
 	}
-	fmt.Printf("Initialized GitMemo memory repository at %s\n", root)
+	fmt.Printf("Initialized Runethread memory repository at %s\n", root)
 	return 0
 }
 
@@ -94,10 +94,10 @@ func runUpgrade(args []string) int {
 		return 1
 	}
 	if result.AlreadyCurrent {
-		fmt.Printf("GitMemo repository is already current for %s (contract %d).\n", result.ToVersion, result.ToContract)
+		fmt.Printf("Runethread repository is already current for %s (contract %d).\n", result.ToVersion, result.ToContract)
 		return 0
 	}
-	fmt.Printf("Upgraded GitMemo repository from %s / contract %d to %s / contract %d.\n", result.FromVersion, result.FromContract, result.ToVersion, result.ToContract)
+	fmt.Printf("Upgraded Runethread repository from %s / contract %d to %s / contract %d.\n", result.FromVersion, result.FromContract, result.ToVersion, result.ToContract)
 	if len(result.ChangedPaths) > 0 {
 		fmt.Println("Changed managed/generated paths:")
 		for _, path := range result.ChangedPaths {
@@ -168,7 +168,7 @@ func runIndex(args []string) int {
 			fmt.Fprintln(os.Stderr, "index stale marker failed:", err)
 			return 1
 		}
-		fmt.Println("GitMemo indexes marked stale; canonical memories remain authoritative.")
+		fmt.Println("Runethread indexes marked stale; canonical memories remain authoritative.")
 		return 0
 	}
 	if *write {
@@ -176,7 +176,7 @@ func runIndex(args []string) int {
 			fmt.Fprintln(os.Stderr, "index write failed:", err)
 			return 1
 		}
-		fmt.Println("GitMemo indexes regenerated.")
+		fmt.Println("Runethread indexes regenerated.")
 		return 0
 	}
 	stale, err := indexer.Check(root)
@@ -185,13 +185,13 @@ func runIndex(args []string) int {
 		return 1
 	}
 	if len(stale) > 0 {
-		fmt.Fprintln(os.Stderr, "GitMemo indexes are stale:")
+		fmt.Fprintln(os.Stderr, "Runethread indexes are stale:")
 		for _, p := range stale {
 			fmt.Fprintln(os.Stderr, "-", p)
 		}
 		return 1
 	}
-	fmt.Println("GitMemo indexes are current.")
+	fmt.Println("Runethread indexes are current.")
 	return 0
 }
 
@@ -219,9 +219,9 @@ func runTrust(args []string) int {
 
 func runWizard() int {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("GitMemo %s\n", buildinfo.ReleaseVersion)
+	fmt.Printf("Runethread %s\n", buildinfo.ReleaseVersion)
 	fmt.Println("Create a private, user-owned memory repository for your AI assistant.")
-	fmt.Print("\nDirectory [GitMemo-memory]: ")
+	fmt.Print("\nDirectory [runethread-memory]: ")
 	line, err := reader.ReadString('\n')
 	if err != nil && len(line) == 0 {
 		fmt.Fprintln(os.Stderr, "could not read directory:", err)
@@ -229,7 +229,7 @@ func runWizard() int {
 	}
 	target := strings.TrimSpace(line)
 	if target == "" {
-		target = "GitMemo-memory"
+		target = "runethread-memory"
 	}
 	if err := starter.Init(target); err != nil {
 		fmt.Fprintln(os.Stderr, "init failed:", err)
@@ -238,7 +238,7 @@ func runWizard() int {
 	}
 
 	gitReady := initializeGit(target)
-	fmt.Printf("\nCreated GitMemo memory repository at %s.\n", target)
+	fmt.Printf("\nCreated Runethread memory repository at %s.\n", target)
 	if gitReady {
 		fmt.Println("Initialized a local Git repository on branch main.")
 	} else {
@@ -247,7 +247,7 @@ func runWizard() int {
 	fmt.Println("\nNext:")
 	fmt.Println("1. Create an empty PRIVATE repository on GitHub/GitLab/etc. and push this directory to it.")
 	fmt.Println("2. Give your AI assistant access to that private repository.")
-	fmt.Println("3. In any chat, use `GitMemo: store ...` to write and `GitMemo: search ...` to retrieve.")
+	fmt.Println("3. In any chat, use `Runethread: store ...` to write and `Runethread: search ...` to retrieve.")
 	fmt.Println("\nThe repository itself contains the full operating instructions for the assistant.")
 	waitForEnter(reader)
 	return 0
@@ -276,5 +276,5 @@ func isInteractive(file *os.File) bool {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "GitMemo repository tooling\n\nUsage:\n  gitmemo init [dir]\n  gitmemo upgrade [root]\n  gitmemo validate [--json] [root]\n  gitmemo search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  gitmemo index --check [root]\n  gitmemo index --write [root]\n  gitmemo index --mark-stale [root]\n  gitmemo trust version [root]\n  gitmemo version")
+	fmt.Fprintln(os.Stderr, "Runethread repository tooling\n\nUsage:\n  runethread init [dir]\n  runethread upgrade [root]\n  runethread validate [--json] [root]\n  runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  runethread index --check [root]\n  runethread index --write [root]\n  runethread index --mark-stale [root]\n  runethread trust version [root]\n  runethread version")
 }
