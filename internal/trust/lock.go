@@ -13,23 +13,21 @@ import (
 	"sort"
 	"strconv"
 
-	gitmemo "github.com/Karageorgiou/GitMemo"
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
+	runethread "github.com/runethread/core"
+	"github.com/runethread/core/internal/buildinfo"
 )
-
-const sourceRepository = "Karageorgiou/GitMemo"
 
 var stableVersionRE = regexp.MustCompile(`^v([0-9]+)\.([0-9]+)\.([0-9]+)$`)
 
 type Lock struct {
-	LockVersion      int               `json:"lock_version"`
-	SourceRepository string            `json:"source_repository"`
-	GitMemoVersion   string            `json:"gitmemo_version"`
-	RepositoryFormat int               `json:"repository_format"`
-	SchemaVersion    int               `json:"schema_version"`
-	ContractVersion  int               `json:"contract_version"`
-	ContractSHA256   string            `json:"contract_sha256"`
-	FilesSHA256      map[string]string `json:"files_sha256"`
+	LockVersion       int               `json:"lock_version"`
+	SourceRepository  string            `json:"source_repository"`
+	RunethreadVersion string            `json:"runethread_version"`
+	RepositoryFormat  int               `json:"repository_format"`
+	SchemaVersion     int               `json:"schema_version"`
+	ContractVersion   int               `json:"contract_version"`
+	ContractSHA256    string            `json:"contract_sha256"`
+	FilesSHA256       map[string]string `json:"files_sha256"`
 }
 
 type Problem struct {
@@ -38,32 +36,32 @@ type Problem struct {
 }
 
 type repositoryConfig struct {
-	RepositoryFormat int    `json:"repository_format"`
-	SchemaVersion    int    `json:"schema_version"`
-	ContractVersion  int    `json:"contract_version"`
-	GitMemoVersion   string `json:"gitmemo_version"`
+	RepositoryFormat  int    `json:"repository_format"`
+	SchemaVersion     int    `json:"schema_version"`
+	ContractVersion   int    `json:"contract_version"`
+	RunethreadVersion string `json:"runethread_version"`
 }
 
 // ExpectedLock builds the trust lock for the operational contract embedded in
-// the running GitMemo release.
+// the running Runethread release.
 func ExpectedLock() (Lock, error) {
-	files := make(map[string]string, len(gitmemo.ContractPaths()))
-	for _, rel := range gitmemo.ContractPaths() {
-		data, err := fs.ReadFile(gitmemo.ContractFS, rel)
+	files := make(map[string]string, len(runethread.ContractPaths()))
+	for _, rel := range runethread.ContractPaths() {
+		data, err := fs.ReadFile(runethread.ContractFS, rel)
 		if err != nil {
 			return Lock{}, fmt.Errorf("read embedded contract %s: %w", rel, err)
 		}
 		files[rel] = sha256Hex(data)
 	}
 	return Lock{
-		LockVersion:      buildinfo.TrustLockVersion,
-		SourceRepository: sourceRepository,
-		GitMemoVersion:   buildinfo.ReleaseVersion,
-		RepositoryFormat: buildinfo.RepositoryFormatVersion,
-		SchemaVersion:    buildinfo.SchemaVersion,
-		ContractVersion:  buildinfo.ContractVersion,
-		ContractSHA256:   aggregateDigest(files),
-		FilesSHA256:      files,
+		LockVersion:       buildinfo.TrustLockVersion,
+		SourceRepository:  buildinfo.SourceRepository,
+		RunethreadVersion: buildinfo.ReleaseVersion,
+		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
+		SchemaVersion:     buildinfo.SchemaVersion,
+		ContractVersion:   buildinfo.ContractVersion,
+		ContractSHA256:    aggregateDigest(files),
+		FilesSHA256:       files,
 	}, nil
 }
 
@@ -80,17 +78,18 @@ func JSON() ([]byte, error) {
 }
 
 // ReadPinnedVersion is intentionally forward-tolerant. The stable validation
-// bootstrap workflow created by v0.3 only needs the lock envelope version and
-// pinned release. Future lock files may add fields without requiring the
-// workflow itself to change.
+// bootstrap only needs the lock envelope version and pinned Runethread release.
+// Future lock files may add fields without requiring the bootstrap itself to
+// change.
 func ReadPinnedVersion(root string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(root, ".gitmemo", "lock.json"))
+	path := filepath.Join(root, buildinfo.ManagedMetadataDir, "lock.json")
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("read trust lock: %w", err)
 	}
 	var envelope struct {
-		LockVersion    int    `json:"lock_version"`
-		GitMemoVersion string `json:"gitmemo_version"`
+		LockVersion       int    `json:"lock_version"`
+		RunethreadVersion string `json:"runethread_version"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return "", fmt.Errorf("parse trust lock: %w", err)
@@ -98,35 +97,36 @@ func ReadPinnedVersion(root string) (string, error) {
 	if envelope.LockVersion < 1 {
 		return "", fmt.Errorf("invalid trust lock version %d", envelope.LockVersion)
 	}
-	if !isSupportedPinnedVersion(envelope.GitMemoVersion) {
-		return "", fmt.Errorf("trust lock pins unsupported release %q; stable bootstrap requires v0.3.0 or newer", envelope.GitMemoVersion)
+	if !isSupportedPinnedVersion(envelope.RunethreadVersion) {
+		return "", fmt.Errorf("trust lock pins unsupported release %q; stable bootstrap requires v0.6.0 or newer", envelope.RunethreadVersion)
 	}
-	return envelope.GitMemoVersion, nil
+	return envelope.RunethreadVersion, nil
 }
 
 // Check verifies that the repository's lock, config, and vendored control-plane
 // files exactly match the contract embedded in the running release.
 func Check(root string) []Problem {
 	expected, err := ExpectedLock()
+	lockRel := buildinfo.ManagedMetadataDir + "/lock.json"
 	if err != nil {
-		return []Problem{{Path: ".gitmemo/lock.json", Message: err.Error()}}
+		return []Problem{{Path: lockRel, Message: err.Error()}}
 	}
 
-	lockPath := filepath.Join(root, ".gitmemo", "lock.json")
+	lockPath := filepath.Join(root, buildinfo.ManagedMetadataDir, "lock.json")
 	data, err := os.ReadFile(lockPath)
 	if err != nil {
-		return []Problem{{Path: ".gitmemo/lock.json", Message: fmt.Sprintf("read trust lock: %v", err)}}
+		return []Problem{{Path: lockRel, Message: fmt.Sprintf("read trust lock: %v", err)}}
 	}
 	var actual Lock
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&actual); err != nil {
-		return []Problem{{Path: ".gitmemo/lock.json", Message: fmt.Sprintf("parse trust lock: %v", err)}}
+		return []Problem{{Path: lockRel, Message: fmt.Sprintf("parse trust lock: %v", err)}}
 	}
 
 	var problems []Problem
 	addLock := func(message string) {
-		problems = append(problems, Problem{Path: ".gitmemo/lock.json", Message: message})
+		problems = append(problems, Problem{Path: lockRel, Message: message})
 	}
 	if actual.LockVersion != expected.LockVersion {
 		addLock(fmt.Sprintf("lock_version is %d, expected %d for %s", actual.LockVersion, expected.LockVersion, buildinfo.ReleaseVersion))
@@ -134,8 +134,8 @@ func Check(root string) []Problem {
 	if actual.SourceRepository != expected.SourceRepository {
 		addLock(fmt.Sprintf("source_repository is %q, expected %q", actual.SourceRepository, expected.SourceRepository))
 	}
-	if actual.GitMemoVersion != expected.GitMemoVersion {
-		addLock(fmt.Sprintf("gitmemo_version is %q, but running validator is %q", actual.GitMemoVersion, expected.GitMemoVersion))
+	if actual.RunethreadVersion != expected.RunethreadVersion {
+		addLock(fmt.Sprintf("runethread_version is %q, but running validator is %q", actual.RunethreadVersion, expected.RunethreadVersion))
 	}
 	if actual.RepositoryFormat != expected.RepositoryFormat || actual.SchemaVersion != expected.SchemaVersion || actual.ContractVersion != expected.ContractVersion {
 		addLock(fmt.Sprintf("repository/schema/contract versions are %d/%d/%d, expected %d/%d/%d", actual.RepositoryFormat, actual.SchemaVersion, actual.ContractVersion, expected.RepositoryFormat, expected.SchemaVersion, expected.ContractVersion))
@@ -164,7 +164,7 @@ func Check(root string) []Problem {
 			continue
 		}
 		if localHash := sha256Hex(local); localHash != expectedHash {
-			problems = append(problems, Problem{Path: rel, Message: fmt.Sprintf("control-plane digest is %s, expected %s from pinned release %s", localHash, expectedHash, expected.GitMemoVersion)})
+			problems = append(problems, Problem{Path: rel, Message: fmt.Sprintf("control-plane digest is %s, expected %s from pinned release %s", localHash, expectedHash, expected.RunethreadVersion)})
 		}
 	}
 	for rel := range actual.FilesSHA256 {
@@ -178,19 +178,20 @@ func Check(root string) []Problem {
 }
 
 func checkConfig(root string, expected Lock) []Problem {
-	path := filepath.Join(root, ".gitmemo", "config.json")
+	rel := buildinfo.ManagedMetadataDir + "/config.json"
+	path := filepath.Join(root, buildinfo.ManagedMetadataDir, "config.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return []Problem{{Path: ".gitmemo/config.json", Message: fmt.Sprintf("read repository config: %v", err)}}
+		return []Problem{{Path: rel, Message: fmt.Sprintf("read repository config: %v", err)}}
 	}
 	var cfg repositoryConfig
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
-		return []Problem{{Path: ".gitmemo/config.json", Message: fmt.Sprintf("parse repository config: %v", err)}}
+		return []Problem{{Path: rel, Message: fmt.Sprintf("parse repository config: %v", err)}}
 	}
-	if cfg.RepositoryFormat != expected.RepositoryFormat || cfg.SchemaVersion != expected.SchemaVersion || cfg.ContractVersion != expected.ContractVersion || cfg.GitMemoVersion != expected.GitMemoVersion {
-		return []Problem{{Path: ".gitmemo/config.json", Message: fmt.Sprintf("config pins %d/%d/%d/%s, expected %d/%d/%d/%s", cfg.RepositoryFormat, cfg.SchemaVersion, cfg.ContractVersion, cfg.GitMemoVersion, expected.RepositoryFormat, expected.SchemaVersion, expected.ContractVersion, expected.GitMemoVersion)}}
+	if cfg.RepositoryFormat != expected.RepositoryFormat || cfg.SchemaVersion != expected.SchemaVersion || cfg.ContractVersion != expected.ContractVersion || cfg.RunethreadVersion != expected.RunethreadVersion {
+		return []Problem{{Path: rel, Message: fmt.Sprintf("config pins %d/%d/%d/%s, expected %d/%d/%d/%s", cfg.RepositoryFormat, cfg.SchemaVersion, cfg.ContractVersion, cfg.RunethreadVersion, expected.RepositoryFormat, expected.SchemaVersion, expected.ContractVersion, expected.RunethreadVersion)}}
 	}
 	return nil
 }
@@ -231,8 +232,8 @@ func isSupportedPinnedVersion(version string) bool {
 	if major > 0 {
 		return true
 	}
-	if minor > 3 {
+	if minor > 6 {
 		return true
 	}
-	return minor == 3 && patch >= 0
+	return minor == 6 && patch >= 0
 }

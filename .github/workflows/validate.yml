@@ -1,4 +1,4 @@
-name: Validate GitMemo
+name: Validate Runethread
 
 on:
   push:
@@ -26,16 +26,16 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Build GitMemo CLI
-        run: go build -o bin/gitmemo ./cmd/gitmemo
+      - name: Build Runethread CLI
+        run: go build -o bin/runethread ./cmd/runethread
 
       - name: Initialize clean memory repository
         run: |
-          rm -rf "$RUNNER_TEMP/gitmemo-memory"
-          ./bin/gitmemo init "$RUNNER_TEMP/gitmemo-memory"
+          rm -rf "$RUNNER_TEMP/runethread-memory"
+          ./bin/runethread init "$RUNNER_TEMP/runethread-memory"
 
       - name: Check generated memory indexes
-        run: ./bin/gitmemo index --check "$RUNNER_TEMP/gitmemo-memory"
+        run: ./bin/runethread index --check "$RUNNER_TEMP/runethread-memory"
 
       - name: Validate generated memory repository
-        run: ./bin/gitmemo validate "$RUNNER_TEMP/gitmemo-memory"
+        run: ./bin/runethread validate "$RUNNER_TEMP/runethread-memory"

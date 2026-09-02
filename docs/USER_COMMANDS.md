@@ -1,55 +1,50 @@
-# GitMemo user command interface
+# Runethread user command interface
 
-This document defines the small user-facing command convention for asking an AI assistant to use a GitMemo memory repository.
+This document defines the small user-facing command convention for asking an AI assistant to use a Runethread memory repository.
 
 These commands are natural-language control phrases, not parser-sensitive shell commands. Assistants SHOULD tolerate ordinary capitalization and punctuation variations while preserving the intent described here.
 
 ## Repository discovery
 
-When a GitMemo command is issued and the active memory repository is not already known, the assistant SHOULD locate the user's private GitMemo memory repository before acting.
+When a Runethread command is issued and the active memory repository is not already known, the assistant SHOULD locate the user's private Runethread repository before acting.
 
-A valid memory repository is identified by the presence of at least:
+A native repository is identified by at least:
 
-- `.gitmemo/config.json`
+- `.runethread/config.json`
+- `.runethread/lock.json`
 - `MEMORY_PROTOCOL.md`
 - `memories/`
 - `index/`
 
-On GitHub, a repository named `GitMemo-memory` is a strong candidate when it satisfies those markers.
+A repository named `runethread-memory` is only a strong candidate when it satisfies those markers. The public `runethread/core` implementation and `runethread/memory-template` MUST NOT be mistaken for the user's private memory repository.
 
-The public `GitMemo` infrastructure repository MUST NOT be mistaken for the user's private memory repository.
+If multiple plausible repositories exist and the target cannot be established safely, ask the user which repository to use. If repository access is unavailable, say so rather than pretending the command completed.
 
-If more than one plausible memory repository exists and the intended target cannot be established safely, ask the user which repository to use rather than writing to an arbitrary candidate.
-
-If repository access is unavailable, say so instead of pretending the command was completed.
-
-## `GitMemo: store <content>`
+## `Runethread: store <content>`
 
 This is an explicit durable memory-write request.
 
 The assistant MUST:
 
-1. locate and read the active private memory repository's `MEMORY_PROTOCOL.md`;
-2. follow the schema, content-format, taxonomy, security, stale-write, and validation rules;
+1. locate and read the active private repository's verified `MEMORY_PROTOCOL.md`;
+2. follow schema, content-format, taxonomy, security, stale-write, and validation rules;
 3. search existing memories before creating anything new;
-4. decide whether the request should create, update, supersede, correct, resolve, or leave an existing memory unchanged;
-5. treat the user's request as an explicit memory request and set `provenance.explicit_memory_request` to `true` on a newly created or materially updated atomic memory when applicable;
-6. regenerate affected indexes when tooling is available, or explicitly mark `index/STALE` when the client can write repository files but cannot execute the indexer;
+4. decide whether to create, update, supersede, correct, resolve, or leave an existing memory unchanged;
+5. set `provenance.explicit_memory_request` to `true` on a newly created or materially updated atomic memory when applicable;
+6. regenerate affected indexes when tooling is available, or mark `index/STALE` when the client can write files but cannot execute the indexer;
 7. run available repository validation before claiming success;
-8. commit the completed memory change when repository write access is available; and
-9. report what was stored or changed, including the relevant memory ID or IDs and the commit/result actually verified.
+8. commit the completed change when repository write access is available; and
+9. report what was actually stored or changed, including relevant memory IDs and the commit/result actually verified.
 
-The command does not override GitMemo's security rules. Forbidden secrets or credentials MUST NOT be stored merely because the user used `GitMemo: store`.
-
-An explicit store command is presumptively eligible for durable storage, but the assistant should still avoid unnecessary duplication and preserve historical meaning correctly.
+The command does not override security rules. Forbidden secrets or credentials MUST NOT be stored merely because the user used `Runethread: store`.
 
 Example:
 
 ```text
-GitMemo: store that for coding tasks I want actual outputs verified before claiming success.
+Runethread: store that for coding tasks I want actual outputs verified before claiming success.
 ```
 
-## `GitMemo: search <query>`
+## `Runethread: search <query>`
 
 This is an explicit retrieval-only request.
 
@@ -57,41 +52,41 @@ The assistant MUST NOT create, modify, regenerate, commit, resolve, supersede, o
 
 The assistant SHOULD:
 
-1. locate and read the active private memory repository's operating contract;
-2. determine whether the generated index is known current; if `index/STALE` exists or freshness is otherwise unknown, treat index results as potentially incomplete;
-3. use the narrowest Index v2 entry point when the index is usable: exact UUID shard for a known memory ID, direct project/topic/tag/type/status index for known metadata, or the deterministic term index / `gitmemo search` for ordinary language;
-4. use repository search and canonical sidecars when index freshness is unknown, stale, missing, or unsupported;
-5. retrieve the smallest set of canonical atomic memories needed to answer the query;
-6. follow relevant correction, supersession, dependency, or conflict edges when necessary; and
-7. clearly distinguish stored memory from any live project or external verification performed in addition to the memory search.
+1. locate and read the active private repository's verified operating contract;
+2. determine whether the generated index is known current;
+3. use the narrowest Index v2 entry point when usable: exact UUID shard, direct metadata index, or deterministic term index / `runethread search`;
+4. fall back to repository search and canonical sidecars when index freshness is stale, unknown, missing, or unsupported;
+5. retrieve the smallest canonical evidence set needed;
+6. follow relevant correction, supersession, dependency, or conflict edges; and
+7. distinguish stored memory from live project or external verification performed in addition to memory retrieval.
 
-An index hit is discovery metadata, not sufficient factual evidence by itself. Read the selected canonical memory Markdown/sidecar pair before relying on its substantive content.
+An index hit is discovery metadata, not sufficient factual evidence by itself. Read the selected canonical Markdown/JSON pair before relying on substantive content.
 
-If nothing relevant is stored, say that the GitMemo search found no relevant memory rather than inventing one. If the index is not known current, do not claim a complete negative search based only on that index.
+If nothing relevant is stored, say that the Runethread search found no relevant memory rather than inventing one. If index freshness is unknown, do not claim a complete negative search based only on the index.
 
 Examples:
 
 ```text
-GitMemo: search what we decided about Go versus Python.
+Runethread: search what we decided about Go versus Python.
 ```
 
 ```text
-GitMemo: search for unresolved GitMemo work.
+Runethread: search for unresolved memory-system work.
 ```
 
 ## Why `store`, not `remember`
 
-`remember` is intentionally not the canonical write command because ordinary conversation uses that word both for storing information and for recalling information. `store` is unambiguous: it means persist this in GitMemo.
+`remember` is intentionally not the canonical write command because ordinary conversation uses it for both storage and recall. `store` is unambiguous: persist this in Runethread.
 
-An assistant MUST NOT interpret `GitMemo: remember ...` as an explicit durable write merely from the word `remember`. If the user's intent is clear from additional wording, follow that intent; otherwise prefer the canonical `store` and `search` commands.
+An assistant MUST NOT interpret `Runethread: remember ...` as an explicit durable write merely from the word `remember`. If intent is clear from additional wording, follow that intent; otherwise prefer the canonical `store` and `search` commands.
 
 ## Ordinary use
 
-A user may also say something like `use GitMemo` without using one of the explicit commands. That means the assistant may consult GitMemo as context when materially useful, but it is not by itself an explicit request to create a new durable memory.
+A user may also say something like `use Runethread` without an explicit command. That means the assistant may consult Runethread when materially useful, but it is not by itself an explicit request to create durable memory.
 
 The two primary commands are intentionally small and stable:
 
 ```text
-GitMemo: store ...
-GitMemo: search ...
+Runethread: store ...
+Runethread: search ...
 ```

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
-	"github.com/Karageorgiou/GitMemo/internal/starter"
+	"github.com/runethread/core/internal/indexer"
+	"github.com/runethread/core/internal/starter"
 )
 
 const (

@@ -1,10 +1,10 @@
-# GitMemo Index Format
+# Runethread Index Format
 
 ## Purpose
 
-GitMemo indexes are deterministic, disposable discovery accelerators generated from canonical memory sidecars and project files. They are not independent sources of truth and MUST NOT contain unique knowledge.
+Runethread indexes are deterministic, disposable discovery accelerators generated from canonical memory sidecars and project files. They are not independent sources of truth and MUST NOT contain unique knowledge.
 
-Index format v2 replaces the monolithic `index/memories.jsonl` machine index with bounded, sharded lookup structures. The goals are fast targeted reads, smaller Git diffs, lower write contention between independent conversations or agents, and a layout that can scale to substantially larger repositories without requiring an LLM to load one global catalog.
+Index format v2 replaces the old monolithic `index/memories.jsonl` machine index with bounded, sharded lookup structures. The goals are fast targeted reads, smaller Git diffs, lower write contention between independent conversations or agents, and a layout that can scale without requiring an LLM to load one global catalog.
 
 The canonical memory remains the Markdown + JSON pair under `memories/`. If an index is stale, missing, damaged, or unsupported, operators MUST fall back to canonical source files or repository search.
 
@@ -14,17 +14,17 @@ The canonical memory remains the Markdown + JSON pair under `memories/`. If an i
 
 `index/catalog.json` contains:
 
-- `index_version` — the committed index-format version;
+- `index_version` — committed index-format version;
 - `record_count` — number of indexed atomic memory sidecars;
-- `memory_source_sha256` — deterministic SHA-256 digest of the sorted memory-sidecar paths and bytes used to build the machine indexes;
+- `memory_source_sha256` — deterministic SHA-256 digest of sorted memory-sidecar paths and bytes used to build the machine indexes;
 - sharding parameters;
-- ID-list and posting chunk sizes plus the maximum committed postings per term;
+- ID-list and posting chunk sizes plus maximum committed postings per term;
 - indexed term fields;
-- a human-readable description of the generated layout.
+- a description of the generated layout.
 
-Index-format versioning is separate from the memory sidecar schema. A GitMemo release may change only the generated index format while preserving the canonical memory schema.
+Index-format versioning is separate from the memory sidecar schema. A Runethread release may change only generated indexes while preserving the canonical memory schema.
 
-The index format is controlled by the pinned GitMemo release. Do not invent repository-local variants.
+The index format is controlled by the pinned Runethread release. Do not invent repository-local variants.
 
 ---
 
@@ -56,22 +56,24 @@ index/
 │   └── <status>.json
 ├── terms/
 │   └── <sha256-term-prefix>.json
+├── term-postings/
+│   └── <sha256-prefix>/<full-sha256>/<chunk>.json
 ├── projects.md
 ├── open-loops.md
 └── preferences.md
 ```
 
-Only non-empty machine shards are created. Therefore a clean repository with no memories normally contains `catalog.json` plus the human navigation indexes, but no `by-id`, taxonomy, or term shard files.
+Only non-empty machine shards are created. A clean repository with no memories normally contains `catalog.json` plus human navigation indexes but no UUID, taxonomy, or term shards.
 
-`index/STALE`, when present, is an explicit dirty marker rather than a generated current-index file. It tells readers that the committed discovery indexes MUST be treated as incomplete until regeneration succeeds.
+`index/STALE`, when present, is an explicit dirty marker rather than a generated current-index file. It tells readers that committed discovery indexes MUST be treated as incomplete until regeneration succeeds.
 
-The entire `index/` directory is generated output. `gitmemo index --write` is allowed to replace its generated contents and remove obsolete files from older index formats.
+The entire `index/` directory is generated output. `runethread index --write` may replace its generated contents and remove obsolete files from older index formats.
 
 ---
 
 ## Exact ID lookup
 
-A UUID is assigned to an ID shard by computing SHA-256 over the lowercase full UUID and using the first three hexadecimal hash characters (12 bits). The first two hash characters select a directory and the third selects the shard file:
+A UUID is assigned to an ID shard by computing SHA-256 over the lowercase full UUID and using the first three hexadecimal hash characters (12 bits). The first two characters select a directory and the third selects a shard file:
 
 ```text
 <uuid> -> SHA-256(lowercase uuid) -> index/by-id/<first-two-hash-hex>/<third-hash-hex>.json
@@ -79,15 +81,15 @@ A UUID is assigned to an ID shard by computing SHA-256 over the lowercase full U
 
 Each ID shard is a JSON object whose keys are full memory UUIDs and whose values contain retrieval metadata such as title, type, lifecycle, summary, taxonomy, provenance basis, relationships, content path, and sensitivity.
 
-At most 4096 ID shard files are possible with the current three-hex-character / 12-bit SHA-256 prefix, distributed beneath at most 256 first-level directories. Hashing the complete UUID keeps shard distribution uniform even if a valid UUID producer has biased or sequential visible prefixes. A reader that already knows a UUID therefore opens one deterministic shard instead of scanning a repository-wide catalog.
+At most 4096 ID shard files are possible with the current 12-bit SHA-256 prefix, distributed beneath at most 256 first-level directories. Hashing the complete UUID keeps distribution uniform even when a UUID producer has biased or sequential visible prefixes.
 
-With respect to total repository size, lookup requires a constant number of shard-path calculations and file reads. At one million uniformly distributed UUIDv4 memories, the expected average is about 244 records per ID shard instead of about 3906 with an 8-bit/256-shard layout. Actual latency still depends on filesystem, Git provider, network, record size, and distribution.
+A reader that already knows a UUID therefore opens one deterministic shard instead of scanning a repository-wide catalog.
 
 ---
 
 ## Direct metadata indexes
 
-The following indexes map a normalized schema-controlled or slug value to a sorted list of matching memory UUIDs:
+These indexes map a normalized schema-controlled or slug value to a sorted list of matching UUIDs:
 
 - `by-project/<project-slug>.json`
 - `by-topic/<topic-slug>.json`
@@ -96,21 +98,19 @@ The following indexes map a normalized schema-controlled or slug value to a sort
 - `by-lifecycle/<lifecycle>.json`
 - `by-open-loop-status/<status>.json`
 
-A direct index file has the form:
+A direct index descriptor has the form:
 
 ```json
 {"ids":["<uuid>","<uuid>"]}
 ```
 
-IDs are sorted deterministically.
-
-These files allow project/topic/tag/type/status filtering without scanning every memory entry. A list of up to 1,024 UUIDs is stored inline in its descriptor. Larger lists are deterministically chunked into 1,024-ID files beneath a sibling directory named for the key, so a very large project, tag, lifecycle, or type never becomes one unbounded JSON blob. Reading the complete category remains O(number of matching IDs), which is unavoidable for an API that returns every match.
+IDs are deterministic and sorted. Lists up to 1,024 UUIDs are stored inline. Larger lists are deterministically chunked into 1,024-ID files beneath a sibling directory for that key, preventing one unbounded category blob.
 
 ---
 
 ## Natural-language term index
 
-GitMemo v2 includes a deterministic inverted term index for discovery from ordinary language.
+Index v2 includes a deterministic inverted term index for ordinary-language discovery.
 
 ### Tokenization
 
@@ -121,11 +121,11 @@ Indexed text is tokenized by:
 3. treating punctuation and other characters as separators;
 4. indexing whole resulting tokens.
 
-The committed index does not perform stemming, embeddings, semantic-vector search, or language-specific synonym expansion. Retrieval aliases, topics, tags, entities, and good memory titles remain important for durable recall.
+The committed index does not perform stemming, embeddings, semantic-vector search, or language-specific synonym expansion. Retrieval aliases, topics, tags, entities, and good memory titles therefore remain important.
 
 ### Indexed fields and weights
 
-Term postings are generated from these fields:
+Term postings are generated from:
 
 - title: weight 8
 - aliases: weight 6
@@ -138,43 +138,41 @@ Term postings are generated from these fields:
 
 Weights are discovery heuristics only. They do not express truth, confidence, authority, or importance.
 
-A term receives a field's weight at most once per memory even if that term occurs repeatedly within the same weighted field group. This prevents repeated prose from artificially dominating retrieval.
+A term receives a field group's weight at most once per memory even if repeated within that group.
 
 ### Hash sharding
 
-A normalized term is deterministically assigned to a term shard from a prefix of:
+A normalized term is assigned from a prefix of:
 
 ```text
 SHA-256(UTF-8 normalized term)
 ```
 
-The current prefix length is recorded in `catalog.json`. Hash sharding is used instead of visible-letter sharding so common linguistic prefixes do not concentrate most terms into a few files.
+The current prefix length is recorded in `catalog.json`; v2 currently uses three hexadecimal characters. Hash sharding avoids concentrating common linguistic prefixes into a few files.
 
-Each term shard is a JSON object from normalized term to a descriptor containing its exact `document_frequency` and either inline postings, chunk metadata, or `suppressed: true`. A posting contains:
+Each term shard maps normalized terms to descriptors containing exact `document_frequency` and either inline postings, chunk metadata, or `suppressed: true`. A posting has the form:
 
 ```json
 {"id":"<uuid>","score":8}
 ```
 
-Postings are sorted by score descending and UUID ascending. Up to 1,024 postings are stored inline. Larger posting lists are split into deterministic 1,024-posting files under `index/term-postings/<sha256-prefix>/<full-sha256>/`. A term with more than 32,768 matching memories retains its exact document frequency but its postings are intentionally suppressed: such a term is too broad to be a useful Git-native candidate set and the query must include a more specific term. This is language-independent and places a hard bound on committed postings for any one term.
+Postings are sorted by score descending and UUID ascending. Up to 1,024 postings are stored inline. Larger posting lists are split into deterministic 1,024-posting files under `index/term-postings/<sha256-prefix>/<full-sha256>/`.
 
-For a query, the reader computes the shard for each normalized query term, reads only those shard files, combines postings, then resolves the highest-ranked UUIDs through the relevant `by-id` shard(s).
+A term matching more than 32,768 memories retains exact document frequency but suppresses committed postings. Such a term is too broad to be a useful Git-native candidate set and the query must include a more specific term. This places a hard bound on committed postings for any one term.
 
-The query cost is therefore driven primarily by the number of query terms and their posting lists rather than by the total number of memory records.
+For a query, the reader computes the shard for each normalized query term, reads only those shard files, combines postings, then resolves highest-ranked UUIDs through relevant `by-id` shards.
 
 ---
 
 ## Search ranking
 
-The built-in deterministic term search ranks candidate memories by:
+Built-in deterministic term search ranks candidates by:
 
 1. number of distinct query terms matched, descending;
-2. sum of field weights for the matched terms, descending;
-3. UUID, ascending, as a deterministic final tie-breaker.
+2. sum of field weights for matched terms, descending;
+3. UUID ascending as the final deterministic tie-breaker.
 
-This is deliberately simple and inspectable. It is a first-stage discovery mechanism, not a semantic reasoning engine.
-
-An LLM SHOULD read the canonical atomic memories for the selected results before relying on their factual content.
+This is a transparent first-stage discovery mechanism, not a semantic reasoning engine. An LLM SHOULD read canonical atomic memories for selected results before relying on factual content.
 
 ---
 
@@ -182,24 +180,24 @@ An LLM SHOULD read the canonical atomic memories for the selected results before
 
 Canonical source data and generated indexes have different authority.
 
-If an execution-capable client changes data that affects indexed metadata, it SHOULD run:
+If an execution-capable client changes indexed metadata, it SHOULD run:
 
 ```bash
-gitmemo index --write .
-gitmemo index --check .
+runethread index --write .
+runethread index --check .
 ```
 
-If a client can write repository files but cannot execute the GitMemo indexer, it SHOULD create or preserve:
+If a client can write repository files but cannot execute the Runethread indexer, it SHOULD create or preserve:
 
 ```text
 index/STALE
 ```
 
-using the standard stale-marker text documented by the pinned GitMemo release. The marker MUST NOT be removed merely because an operator hopes the indexes are current. Successful deterministic regeneration removes it because the entire generated index tree is replaced.
+using the standard stale-marker text from the pinned Runethread release. The marker MUST NOT be removed merely because an operator hopes indexes are current. Successful deterministic regeneration removes it by replacing the generated index tree.
 
-Absence of `index/STALE` is a useful operational signal but is not, by itself, cryptographic proof that no out-of-band source edit occurred. `gitmemo index --check` remains the strict freshness check because it regenerates the expected index from canonical source state and compares the complete generated tree.
+Absence of `index/STALE` is useful but not cryptographic proof that no out-of-band source edit occurred. `runethread index --check` is the strict check because it regenerates expected output from canonical source state and compares the complete generated tree.
 
-When freshness is unknown, an operator MUST treat index results as potentially incomplete and fall back to canonical files or repository search where completeness matters.
+When freshness is unknown, treat index results as potentially incomplete and fall back to canonical files or repository search where completeness matters.
 
 ---
 
@@ -207,21 +205,21 @@ When freshness is unknown, an operator MUST treat index results as potentially i
 
 `memory_source_sha256` in `catalog.json` is computed deterministically over every sorted memory sidecar path and its exact bytes.
 
-The digest makes the source state that produced a committed machine index explicit and audit-friendly. Recomputing the digest requires reading canonical sidecars, so normal fast queries do not recompute it on every lookup.
+The digest makes the source state used to produce a committed machine index explicit and audit-friendly. Recomputing it requires reading canonical sidecars, so fast queries do not recompute it on every lookup.
 
-The digest is not a replacement for `gitmemo index --check`.
+The digest is not a replacement for `runethread index --check`.
 
 ---
 
 ## Write and concurrency model
 
-The v1 monolithic machine index caused every memory change to rewrite one global file. Index v2 removes that single machine-index write hotspot.
+The old monolithic machine index caused every memory change to rewrite one global file. Index v2 removes that hotspot.
 
-Logically, a memory affects only its relevant ID, taxonomy, type/status, and term shards. The current Go indexer rebuilds the complete generated tree in a temporary directory and atomically swaps it into place for correctness and simplicity; Git itself records only files whose resulting bytes changed.
+Logically, a memory affects only relevant ID, taxonomy, type/status, and term shards. The current Go indexer rebuilds the complete generated tree in a temporary directory and atomically swaps it into place for correctness and simplicity; Git records only files whose resulting bytes changed.
 
-This reduces unrelated Git conflicts even though regeneration remains deterministic and full-tree locally.
+This reduces unrelated Git conflicts even though local regeneration remains deterministic and full-tree.
 
-Human convenience indexes such as `open-loops.md` may still be shared files and can conflict if two writers modify the same logical category concurrently. Canonical atomic memories remain the merge authority; generated files should be regenerated rather than manually reconciled as facts.
+Human convenience indexes such as `open-loops.md` may still be shared files and can conflict when two writers change the same logical category. Canonical atomic memories remain merge authority; generated files should be regenerated rather than manually reconciled as facts.
 
 ---
 
@@ -233,16 +231,16 @@ If index generation fails:
 - do not claim indexes are current;
 - preserve or create the stale marker when possible;
 - diagnose the canonical validation error or indexer failure;
-- retry regeneration only after the source problem is understood.
+- retry only after the source problem is understood.
 
-A validator may report stale generated indexes as warnings while canonical memory validation still passes.
+A validator may report stale indexes as warnings while canonical validation still passes.
 
-`gitmemo index --check` is intentionally strict and fails when expected files are missing, bytes differ, obsolete generated files remain, or `index/STALE` exists.
+`runethread index --check` is intentionally strict and fails when expected files are missing, bytes differ, obsolete generated files remain, or `index/STALE` exists.
 
 ---
 
 ## Optional local acceleration
 
-A future GitMemo client may build an uncommitted local SQLite/FTS or similar cache from canonical Git/index data for even faster local retrieval. Such a cache would be disposable implementation state, not part of the committed GitMemo repository format and not an authority source.
+A future Runethread client may build an uncommitted local SQLite/FTS or similar cache from canonical Git/index data for faster local retrieval. Such a cache would be disposable implementation state, not committed repository format and not an authority source.
 
 Index v2 does not require SQLite, a vector database, embeddings, a server, or any paid service.

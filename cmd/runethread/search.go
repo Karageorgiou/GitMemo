@@ -7,13 +7,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
+	"github.com/runethread/core/internal/indexer"
 )
 
 func runSearch(args []string) int {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	root := fs.String("root", ".", "GitMemo repository root")
+	root := fs.String("root", ".", "Runethread repository root")
 	limit := fs.Int("limit", 10, "maximum number of results")
 	asJSON := fs.Bool("json", false, "emit machine-readable JSON")
 	if err := fs.Parse(args); err != nil {

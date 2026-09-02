@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Karageorgiou/GitMemo/internal/buildinfo"
-	"github.com/Karageorgiou/GitMemo/internal/memory"
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/memory"
 )
 
 const IndexVersion = buildinfo.IndexFormatVersion
@@ -22,7 +22,7 @@ var HumanIndexPaths = []string{
 	"index/preferences.md",
 }
 
-const staleMarkerText = "GitMemo generated indexes are stale.\nCanonical memories and project files remain authoritative.\nRegenerate with: gitmemo index --write .\n"
+const staleMarkerText = "Runethread generated indexes are stale.\nCanonical memories and project files remain authoritative.\nRegenerate with: runethread index --write .\n"
 
 type indexRelationship struct {
 	Type     string `json:"type"`
@@ -175,7 +175,7 @@ func replaceIndexDirectory(root string, result Result) error {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
-	newDir, err := os.MkdirTemp(root, ".gitmemo-index-new-*")
+	newDir, err := os.MkdirTemp(root, ".runethread-index-new-*")
 	if err != nil {
 		return fmt.Errorf("create temporary index directory: %w", err)
 	}
@@ -201,7 +201,7 @@ func replaceIndexDirectory(root string, result Result) error {
 	}
 
 	indexDir := filepath.Join(root, "index")
-	backupDir, err := os.MkdirTemp(root, ".gitmemo-index-old-*")
+	backupDir, err := os.MkdirTemp(root, ".runethread-index-old-*")
 	if err != nil {
 		return fmt.Errorf("reserve backup index path: %w", err)
 	}

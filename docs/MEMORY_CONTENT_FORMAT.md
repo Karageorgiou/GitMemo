@@ -173,7 +173,7 @@ Do not store every completed task as a milestone.
 ## REFERENCE
 Required: `## Reference`, `## When to use this`.
 Optional: `## Procedure`, `## Details`, `## Caveats`, `## Examples`.
-Do not turn GitMemo into a duplicate encyclopedia or source-code mirror.
+Do not turn Runethread into a duplicate encyclopedia or source-code mirror.
 
 ---
 

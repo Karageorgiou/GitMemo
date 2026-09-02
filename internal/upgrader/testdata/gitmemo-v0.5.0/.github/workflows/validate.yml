@@ -1,0 +1,45 @@
+# Managed by GitMemo. Stable bootstrap workflow v1.
+# The bootstrap pin intentionally stays at v0.3.0; it only resolves the release
+# recorded in .gitmemo/lock.json. The resolved release performs full validation.
+name: Validate GitMemo Memory
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out memory repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.0'
+
+      - name: Install stable GitMemo trust bootstrap
+        run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@v0.3.0
+
+      - name: Resolve pinned GitMemo release
+        id: pinned
+        run: |
+          VERSION="$("$(go env GOPATH)/bin/gitmemo" trust version .)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned GitMemo CLI
+        run: go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@${{ steps.pinned.outputs.version }}
+
+      - name: Validate memory repository
+        run: |
+          "$(go env GOPATH)/bin/gitmemo" validate .
+
+      - name: Report derived index freshness
+        run: |
+          if ! "$(go env GOPATH)/bin/gitmemo" index --check .; then
+            echo "::warning::GitMemo derived indexes are stale. Canonical memories remain authoritative; regenerate indexes when an execution-capable client is available."
+          fi

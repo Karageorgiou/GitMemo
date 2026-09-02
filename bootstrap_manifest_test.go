@@ -1,4 +1,4 @@
-package gitmemo
+package runethread
 
 import (
 	"encoding/json"
@@ -37,12 +37,12 @@ type bootstrapManifest struct {
 		PersonalDataCanonical bool `json:"personal_data_allowed_in_canonical_repository"`
 		PersonalDataTemplate  bool `json:"personal_data_allowed_in_template_repository"`
 		PrivateBeforeWrites    bool `json:"memory_repository_must_be_private_before_personal_writes"`
-		RequestCredentials     bool `json:"request_pasted_credentials"`
+		RequestCredentials     bool `json:"request_credentials"`
 	} `json:"security"`
 }
 
 func TestBootstrapManifest(t *testing.T) {
-	data, err := os.ReadFile("gitmemo-bootstrap.json")
+	data, err := os.ReadFile("runethread-bootstrap.json")
 	if err != nil {
 		t.Fatalf("read bootstrap manifest: %v", err)
 	}
@@ -54,10 +54,10 @@ func TestBootstrapManifest(t *testing.T) {
 	if manifest.BootstrapProtocol != 1 {
 		t.Fatalf("bootstrap_protocol = %d, want 1", manifest.BootstrapProtocol)
 	}
-	if manifest.Project != "GitMemo" {
+	if manifest.Project != "Runethread" {
 		t.Fatalf("project = %q", manifest.Project)
 	}
-	if manifest.CanonicalRepository != "Karageorgiou/GitMemo" {
+	if manifest.CanonicalRepository != "runethread/core" {
 		t.Fatalf("canonical_repository = %q", manifest.CanonicalRepository)
 	}
 	if manifest.SetupInstructions != "AI_SETUP.md" {
@@ -66,11 +66,14 @@ func TestBootstrapManifest(t *testing.T) {
 	if _, err := os.Stat(manifest.SetupInstructions); err != nil {
 		t.Fatalf("setup instructions path is not present: %v", err)
 	}
+	if _, err := os.Stat("gitmemo-bootstrap.json"); !os.IsNotExist(err) {
+		t.Fatalf("legacy bootstrap manifest must not remain a native current file: %v", err)
+	}
 
-	if manifest.Template.Repository != "Karageorgiou/GitMemo-template" {
+	if manifest.Template.Repository != "runethread/memory-template" {
 		t.Fatalf("template repository = %q", manifest.Template.Repository)
 	}
-	if manifest.Template.DefaultMemoryRepositoryName != "GitMemo-memory" {
+	if manifest.Template.DefaultMemoryRepositoryName != "runethread-memory" {
 		t.Fatalf("default memory repository name = %q", manifest.Template.DefaultMemoryRepositoryName)
 	}
 	if manifest.Template.RequiredVisibility != "private" {
@@ -90,8 +93,8 @@ func TestBootstrapManifest(t *testing.T) {
 	}
 
 	for _, required := range []string{
-		".gitmemo/config.json",
-		".gitmemo/lock.json",
+		".runethread/config.json",
+		".runethread/lock.json",
 		"MEMORY_PROTOCOL.md",
 		"memories",
 		"projects",
@@ -101,7 +104,7 @@ func TestBootstrapManifest(t *testing.T) {
 		}
 	}
 
-	if manifest.Commands.Store != "GitMemo: store ..." || manifest.Commands.Search != "GitMemo: search ..." {
+	if manifest.Commands.Store != "Runethread: store ..." || manifest.Commands.Search != "Runethread: search ..." {
 		t.Fatalf("unexpected command contract: store=%q search=%q", manifest.Commands.Store, manifest.Commands.Search)
 	}
 	if manifest.Security.PersonalDataCanonical || manifest.Security.PersonalDataTemplate {
@@ -124,10 +127,10 @@ func TestBootstrapManifest(t *testing.T) {
 	query := createURL.Query()
 	wantQuery := map[string]string{
 		"owner":          "@me",
-		"name":           "GitMemo-memory",
+		"name":           "runethread-memory",
 		"visibility":     "private",
-		"template_owner": "Karageorgiou",
-		"template_name":  "GitMemo-template",
+		"template_owner": "runethread",
+		"template_name":  "memory-template",
 	}
 	for key, want := range wantQuery {
 		if got := query.Get(key); got != want {

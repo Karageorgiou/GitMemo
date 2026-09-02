@@ -1,4 +1,4 @@
-module github.com/Karageorgiou/GitMemo
+module github.com/runethread/core
 
 go 1.23.0
 

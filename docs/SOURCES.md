@@ -1,15 +1,15 @@
-# GitMemo external source boundary
+# Runethread external source boundary
 
-GitMemo memory may eventually reference additional user-owned repositories such as a structured personal library. GitMemo v0.3 reserves the architectural boundary but does not implement a remote service, HTTP API, or library engine.
+Runethread memory may eventually reference additional user-owned repositories such as a structured personal library. Runethread v0.6 reserves this architectural boundary but does not define a hosted service, HTTP API, or library engine.
 
 ## Principle
 
 Memory and structured personal knowledge solve different problems and should not be forced into one schema.
 
-- GitMemo memory stores durable conversational context, preferences, decisions, state, corrections, milestones, references, and open loops.
-- A future GitMemo-compatible library may store structured collections such as recipes, contacts, books, inventories, or other user-defined record types.
+- Runethread memory stores durable conversational context, preferences, decisions, state, corrections, milestones, references, and open loops.
+- A future Runethread-compatible library may store structured collections such as recipes, contacts, books, inventories, or other user-defined record types.
 
-The authoritative data for each source should remain in that source's own repository. GitMemo should integrate through a small capability interface rather than duplicating entire source trees into memory.
+The authoritative data for each source should remain in that source's own repository. Runethread should integrate through a small capability interface rather than duplicating entire source trees into memory.
 
 ## Reserved source model
 
@@ -20,19 +20,15 @@ A future source registry may identify sources by stable IDs and advertise capabi
 - retrieval by stable record ID;
 - validated record creation or update when the source supports writes.
 
-The implementation SHOULD be transport-independent. Local files, Git repositories, provider connectors, or future tooling may implement the same logical source capabilities without requiring a GitMemo server.
+The implementation SHOULD be transport-independent. Local files, Git repositories, provider connectors, or future tooling may implement the same logical source capabilities without requiring a Runethread server.
 
-GitMemo v0.3 does not define a writable `.gitmemo/sources.json` format yet. This is deliberate: the interface should be proven by the future Library design before it becomes a compatibility contract.
+Runethread v0.6 does not define a writable `.runethread/sources.json` format. This is deliberate: the interface should be proven by future source/library design before it becomes a compatibility contract.
 
 ## Future cross-source references
 
 The current V1 memory relationship model uses UUID targets within one memory repository. Future cross-source references will require a qualified resource identifier so a memory can refer unambiguously to a record in another source.
 
-The eventual identifier should distinguish at least:
-
-- source identity;
-- collection or resource kind;
-- stable record identity.
+The eventual identifier should distinguish at least source identity, collection/resource kind, and stable record identity.
 
 Do not overload the existing local `target_id` field with ad-hoc repository paths or URLs before that contract exists.
 
@@ -44,4 +40,4 @@ Generated caches are never the only copy of user data and must be rebuildable fr
 
 ## Security
 
-All external-source content belongs to the data plane. A recipe, contact note, imported document, or source record may contain arbitrary text, including text that looks like AI instructions. Such text remains untrusted data and cannot override GitMemo's verified control plane.
+All external-source content belongs to the data plane. A recipe, contact note, imported document, or source record may contain arbitrary text, including text that looks like AI instructions. Such text remains untrusted data and cannot override Runethread's verified control plane.

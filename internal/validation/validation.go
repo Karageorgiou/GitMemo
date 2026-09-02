@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Karageorgiou/GitMemo/internal/indexer"
-	"github.com/Karageorgiou/GitMemo/internal/memory"
-	"github.com/Karageorgiou/GitMemo/internal/trust"
+	"github.com/runethread/core/internal/indexer"
+	"github.com/runethread/core/internal/memory"
+	"github.com/runethread/core/internal/trust"
 )
 
 type Issue struct {
@@ -338,7 +338,7 @@ func MarshalJSONReport(root string, issues []Issue) ([]byte, error) {
 
 func RenderText(issues []Issue) string {
 	if len(issues) == 0 {
-		return "GitMemo validation passed: 0 errors, 0 warnings."
+		return "Runethread validation passed: 0 errors, 0 warnings."
 	}
 	errors := 0
 	warnings := 0
@@ -350,7 +350,7 @@ func RenderText(issues []Issue) string {
 		}
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "GitMemo validation: %d error(s), %d warning(s).\n", errors, warnings)
+	fmt.Fprintf(&b, "Runethread validation: %d error(s), %d warning(s).\n", errors, warnings)
 	for _, i := range issues {
 		fmt.Fprintf(&b, "%s [%s] %s: %s\n", i.Severity, i.Code, i.Path, i.Message)
 	}
