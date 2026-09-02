@@ -2,49 +2,62 @@
 
 Status: **Proposed**
 
-The Runethread rebrand must not strand existing GitMemo users, memory repositories, release history, or Go installation paths. This document defines a staged compatibility-first migration.
+Runethread is being named and structured while GitMemo is still a pre-v1 project with one known active user/deployment and no known external compatibility dependency. This changes the correct migration strategy.
+
+Rather than carry GitMemo naming and compatibility aliases indefinitely, the project will perform one controlled, verified cutover from the current GitMemo state to a fully Runethread-native identity.
+
+The migration is intentionally aggressive about **names** and conservative about **data**.
 
 ## 1. Migration principles
 
-1. Rebranding is not permission to break durable-memory compatibility.
-2. Existing GitMemo memory repositories remain readable and upgradeable.
-3. Existing official GitMemo releases remain immutable historical trust anchors.
-4. Old repository identifiers such as `.gitmemo/` are compatibility data, not cosmetic strings to mass-replace.
-5. Canonical user memory must not be rewritten merely to change branding.
-6. Generated indexes may be regenerated when required.
-7. Every destructive or identity-changing step must have an explicit rollback/recovery path.
-8. The Go module-path transition must be treated as an API/distribution migration, not a text rename.
+1. Preserve canonical user data, UUIDs, relationships, provenance, lifecycle state, and Git history.
+2. Rename current product identifiers consistently now rather than carrying avoidable legacy names into the architecture.
+3. Historical Git commits, tags, and release artifacts remain immutable history and may continue to say GitMemo.
+4. Generated indexes are disposable and should be rebuilt rather than mechanically renamed.
+5. The migration must be deterministic, testable, reviewable, and reversible until verification succeeds.
+6. No successful migration may be reported until the resulting repository passes Runethread validation.
+7. GitMemo v0.5.0 is the supported source state for the known active private memory repository.
+8. No indefinite `gitmemo` CLI alias, `.gitmemo/` native format, or dual-brand control plane is required after the cutover unless a concrete external user is discovered before release.
 
-## 2. Current identity that must be preserved
+## 2. Current source identity
 
-Current implementation module:
+Implementation repository:
 
 ```text
 github.com/Karageorgiou/GitMemo
 ```
 
-Current CLI identity:
+Go module:
+
+```text
+github.com/Karageorgiou/GitMemo
+```
+
+CLI:
 
 ```text
 gitmemo
 ```
 
-Current repository metadata/control paths include `.gitmemo/` and release-pinned GitMemo control-plane files.
+Known active memory repository is currently pinned to:
 
-Existing memory repositories may refer to GitMemo in:
+```text
+GitMemo release:       v0.5.0
+repository format:     1
+schema version:         1
+contract version:       6
+trust lock version:     1
+```
 
-- config/version metadata;
-- trust locks;
-- vendored contracts;
-- validation workflows;
-- setup documentation;
-- release pins;
-- repository names;
-- Git history.
+Current native control metadata uses:
 
-These references are historically meaningful and must not be blindly rewritten.
+```text
+.gitmemo/
+```
 
-## 3. Target identity
+Historical GitMemo releases and tags are not rewritten.
+
+## 3. Target Runethread identity
 
 Public organization:
 
@@ -52,7 +65,7 @@ Public organization:
 https://github.com/runethread
 ```
 
-Target repositories:
+Public repositories:
 
 ```text
 runethread/core
@@ -61,217 +74,316 @@ runethread/memory-template
 runethread/.github
 ```
 
-Target primary domain:
+Primary domain:
 
 ```text
 https://runethread.dev
 ```
 
-Target CLI:
+Go module:
+
+```text
+github.com/runethread/core
+```
+
+CLI:
 
 ```text
 runethread
 ```
 
-Target new-development module path:
+Native repository metadata:
 
 ```text
-github.com/runethread/core
+.runethread/
 ```
 
-The exact timing of the Go module move is release-controlled and must not happen before compatibility behavior is defined and tested.
-
-## 4. Migration stages
-
-### Stage A — architecture only
-
-- keep `Karageorgiou/GitMemo` canonical and unchanged in behavior;
-- document Runethread architecture and migration decisions;
-- do not rename `.gitmemo/`, schemas, lock formats, CLI, or module paths;
-- create no compatibility burden from premature implementation changes.
-
-### Stage B — compatibility release under GitMemo
-
-Publish a final/bridge GitMemo release that:
-
-- clearly announces Runethread as the successor project;
-- retains normal GitMemo operation;
-- recognizes/records enough metadata for a deterministic transition;
-- contains tested migration logic needed by the first Runethread Core release;
-- points users to the new organization/domain;
-- preserves the old trust contract as an immutable release.
-
-The bridge release should not require users to rename their private memory repository.
-
-### Stage C — establish Runethread Core
-
-Create `runethread/core` from the authoritative implementation history using a migration method that preserves Git history where practical.
-
-The first Runethread Core release must:
-
-- support existing officially supported GitMemo repository formats;
-- understand legacy `.gitmemo/` control metadata as required;
-- validate old release pins using their historical GitMemo authority;
-- provide an explicit upgrade path to a Runethread-native repository contract if/when a native format is introduced;
-- never interpret mutable Runethread `main` as authority for old GitMemo repositories.
-
-### Stage D — CLI transition
-
-Introduce `runethread` as the primary CLI.
-
-For a defined compatibility window, options include:
-
-1. retain a `gitmemo` compatibility executable/alias that delegates to compatible Core behavior; or
-2. keep the final GitMemo binary independently available and document the `runethread` replacement path.
-
-The chosen option must be decided by ADR after implementation constraints are known.
-
-### Stage E — optional repository-format migration
-
-Do not require legacy repositories to rename themselves merely because the product is renamed.
-
-A legacy repository may remain valid with `.gitmemo/` metadata indefinitely if that is the safest compatibility choice.
-
-If a new `.runethread/` repository format is introduced, migration must be explicit and deterministic:
-
-```text
-legacy GitMemo repository
-  -> inspect pinned compatibility dimensions
-  -> backup/transaction boundary
-  -> migrate managed control metadata
-  -> preserve user canonical data and UUIDs
-  -> regenerate derived indexes
-  -> validate current contract
-  -> commit only verified result
-```
-
-The project should prefer semantic compatibility over aesthetic consistency.
-
-## 5. Go module-path migration
-
-The current module path is part of the public Go identity:
-
-```text
-github.com/Karageorgiou/GitMemo
-```
-
-The new path will be:
-
-```text
-github.com/runethread/core
-```
-
-Important consequences:
-
-- old `go install` commands must continue working for historical GitMemo releases;
-- old tags cannot be moved or rewritten;
-- import paths in external consumers do not magically redirect;
-- any public Go API that becomes supported must account for module identity explicitly;
-- the CLI transition can occur independently from repository-format migration.
-
-Do not rewrite the existing repository's `go.mod` until the organization/repository transition step is deliberately executed.
-
-## 6. Trust-anchor continuity
-
-Old GitMemo releases remain authoritative for repositories pinned to those releases.
-
-Runethread must be able to distinguish:
-
-```text
-legacy authority: official immutable GitMemo release
-new authority:    official immutable Runethread Core release
-```
-
-A Runethread binary validating a legacy repository must not silently substitute a new Runethread contract for the repository's historical GitMemo contract.
-
-Where cross-brand validation is needed, mappings between release authorities must be deterministic, explicit, and tested.
-
-## 7. Repository names are not data migrations
-
-Existing repositories such as:
-
-```text
-Karageorgiou/GitMemo-memory
-<user>/GitMemo-memory
-```
-
-need not be renamed.
-
-New installations should eventually prefer:
+New private user repository convention:
 
 ```text
 <user>/runethread-memory
 ```
 
-Repository URL changes are navigation/distribution changes. They must not be conflated with canonical memory-format changes.
-
-## 8. Template migration
-
-The public generated template must remain a release artifact, not a second hand-maintained contract.
-
-Transition:
+The first Runethread release should continue the existing semantic version lineage rather than reuse historical tags. With GitMemo currently at v0.5.0, the expected first Runethread release is:
 
 ```text
-final GitMemo release
-  -> legacy GitMemo-template remains available for legacy docs/releases
-
-Runethread Core release
-  -> deterministic Runethread init output
-  -> runethread/memory-template
+v0.6.0
 ```
 
-Users must never receive a template whose vendored control plane and trust lock disagree about which product/release owns the contract.
+## 4. Why a clean cutover is preferable now
 
-## 9. Documentation and redirects
+A long compatibility bridge is appropriate after public adoption. It is not automatically a virtue before adoption.
 
-During transition:
+Carrying both identities would create permanent complexity in:
 
-- old GitHub repository URLs should use GitHub redirects where transfers/renames support them;
-- documentation should state old and new identities explicitly;
-- release notes should distinguish branding changes from repository-format changes;
-- `runethread.dev` becomes the durable public documentation/home identity;
-- old GitMemo documentation for historical releases remains accessible.
+- CLI names;
+- module/import paths;
+- generated repository paths;
+- lock/config field names;
+- documentation;
+- test matrices;
+- MCP tool descriptions;
+- future Orchestrator integration;
+- support/debug output.
 
-## 10. Migration test matrix
+Because the project is still pre-v1 and has no known external users, paying that complexity cost now would make the system less coherent without protecting a demonstrated dependency.
 
-Before the first Runethread Core stable release, automated tests should cover at minimum:
+The clean-cutover window should therefore be used before Runethread gains additional users.
+
+## 5. Public implementation migration
+
+The authoritative GitMemo repository should become Runethread Core by preserving its Git history rather than copying source into an unrelated new repository.
+
+Target:
 
 ```text
-GitMemo v0.1 fixture -> current Runethread upgrader -> validation
-GitMemo v0.2 fixture -> current Runethread upgrader -> validation
-...
-every officially supported GitMemo repository release
+Karageorgiou/GitMemo
+        |
+        | transfer + rename
+        v
+runethread/core
 ```
 
-Tests must protect:
+Git history, issues, pull requests, tags, and release history should remain attached where the hosting platform supports it.
 
-- memory UUIDs;
-- Markdown/JSON meaning;
-- provenance;
-- lifecycle and relationships;
-- project/user-owned files;
-- trust-lock correctness;
-- private/sensitivity metadata;
-- managed vs unmanaged path boundaries;
-- rollback on failure.
+After the repository move, perform a reviewed identity-migration change that updates current source identifiers, including at minimum:
 
-## 11. Rollback strategy
+- `go.mod` module path;
+- internal imports;
+- `cmd/gitmemo` -> `cmd/runethread`;
+- executable/help text;
+- bootstrap/setup manifests;
+- current documentation and links;
+- generated repository defaults;
+- `.gitmemo/` -> `.runethread/` for the new native format;
+- config and lock field names where they encode product identity;
+- trust-source repository identity;
+- workflow/package/release names;
+- templates and user-facing command wording.
 
-Until the transition is proven:
+Historical commits and old immutable release artifacts are not rewritten to hide the previous name.
 
-- do not delete the old GitMemo repository;
-- do not rewrite historical releases or tags;
-- do not force existing private memory repositories into a new layout;
-- make migration commits explicit and reviewable;
-- preserve pre-migration Git state so a failed managed-state upgrade can be reverted safely.
+## 6. Go module and CLI cutover
 
-## 12. Definition of migration success
+The module path changes once:
 
-The rebrand is successful only when all of these are true:
+```text
+github.com/Karageorgiou/GitMemo
+->
+github.com/runethread/core
+```
 
-1. a new user can install Runethread without knowing the GitMemo name;
-2. an existing GitMemo user can continue using their repository without data loss;
-3. every supported legacy repository can be deterministically validated/upgraded;
-4. old immutable GitMemo releases remain meaningful trust anchors;
-5. Runethread's new module/repository identity is clean for future development;
-6. no historical canonical memory is rewritten solely for cosmetic branding.
+The primary executable changes once:
+
+```text
+gitmemo
+->
+runethread
+```
+
+Because there are no known external Go consumers or users to protect, the current plan does not require a permanent compatibility module or executable alias.
+
+Historical GitMemo binaries remain downloadable from historical releases if forensic or rollback access is needed.
+
+If an external dependency is discovered before the cutover release, this decision must be revisited explicitly rather than silently adding compatibility behavior.
+
+## 7. Native repository-format cutover
+
+Runethread's native format should use Runethread terminology from its first release.
+
+Expected managed metadata transition:
+
+```text
+.gitmemo/
+->
+.runethread/
+```
+
+Expected identity metadata transition includes conceptually:
+
+```text
+gitmemo_version
+->
+runethread_version
+
+source_repository: Karageorgiou/GitMemo
+->
+source_repository: runethread/core
+```
+
+The exact schema/field transformation must be encoded as a deterministic migration rather than a blind text replacement.
+
+The Runethread repository-format version should change if required to make the identity transition explicit and machine-detectable.
+
+## 8. Known private memory migration
+
+The active private repository should be migrated as a controlled transaction, not recreated from scratch.
+
+Repository identity:
+
+```text
+Karageorgiou/GitMemo-memory
+->
+Karageorgiou/runethread-memory
+```
+
+Canonical memory identities must be preserved.
+
+Migration flow:
+
+```text
+record pre-migration commit/revision
+        |
+        v
+verify source is expected GitMemo v0.5.0 state
+        |
+        v
+create migration branch / recovery point
+        |
+        v
+migrate managed control-plane identity
+        |
+        v
+migrate project slug/metadata: gitmemo -> runethread
+        |
+        v
+review project-memory text that intentionally names the product
+        |
+        v
+regenerate all derived indexes
+        |
+        v
+validate complete Runethread repository
+        |
+        v
+compare protected invariants before/after
+        |
+        +-- failure -> restore/reject
+        |
+        v
+commit verified migration
+```
+
+The migration must not delete and re-create memories simply to change branding.
+
+## 9. Memory-content handling
+
+Brand migration has two different classes of text and they must not be conflated.
+
+### Managed infrastructure text
+
+Current operational documentation, configuration, generated control-plane files, command names, project slugs, and product identity should be rewritten to Runethread.
+
+### Canonical memory text
+
+Memory UUIDs and semantic history remain canonical.
+
+Because the known memory set is small and primarily concerns the newly created project itself, project memories may be explicitly reviewed and rewritten where `GitMemo` merely names the same project that is now Runethread.
+
+This is a semantic migration, not a global string replacement.
+
+If a memory refers specifically to a historical event or historical release under the GitMemo name, preserving `GitMemo` may be the truthful representation.
+
+A migration record should make the rename itself explicit so provenance remains understandable.
+
+## 10. Derived indexes
+
+Do not attempt to preserve generated index files byte-for-byte.
+
+After canonical data/control metadata migration:
+
+```text
+delete/stage old generated index
+-> rebuild with Runethread Core
+-> verify deterministic index freshness
+```
+
+The record/UUID set represented by the rebuilt index must match the migrated canonical repository.
+
+## 11. Trust-anchor transition
+
+GitMemo v0.5.0 remains an immutable historical source state.
+
+The migration tool must positively recognize the expected old trust/config state before transforming it.
+
+Runethread v0.6.0 becomes the first native Runethread trust anchor after the migration.
+
+The migration must not pretend that an old GitMemo v0.5.0 lock was originally issued by Runethread.
+
+Conceptually:
+
+```text
+verified GitMemo v0.5.0 source
+        |
+        | explicit migration
+        v
+verified Runethread v0.6.0 target
+```
+
+This preserves historical truth without carrying dual-brand native state forever.
+
+## 12. Verification contract
+
+Before migration, capture at minimum:
+
+- source commit SHA;
+- memory record count;
+- complete UUID set;
+- relationships/lifecycle state;
+- provenance fields;
+- project membership;
+- repository format/schema/contract/trust versions.
+
+After migration, verify at minimum:
+
+- the expected number of memory records remains present;
+- UUID set is identical;
+- every Markdown/JSON pair is valid;
+- relationship graph remains valid;
+- lifecycle and provenance are preserved except explicitly reviewed brand changes;
+- no unintended canonical user files disappeared;
+- all generated indexes are rebuilt and fresh;
+- native metadata contains no unintended GitMemo operational identity;
+- full repository validation passes.
+
+A migration that changes the count or UUID set unexpectedly is a hard failure.
+
+## 13. Rollback
+
+Before changing the known private memory repository, retain a durable pre-migration Git revision/branch/tag.
+
+Until target validation succeeds:
+
+- do not delete the source repository/history;
+- do not force-push rewritten history;
+- do not remove the old release artifacts;
+- do not claim the migration is complete.
+
+Rollback should normally mean returning the branch/repository to the pre-migration commit, not reconstructing data manually.
+
+## 14. Compatibility scope after cutover
+
+Runethread's normal supported state begins with the native Runethread format.
+
+A narrow GitMemo v0.5.0 -> Runethread migration path may remain in tooling or documented recovery code because it is cheap insurance for the known source state.
+
+The project does **not** commit to indefinite support for every experimental GitMemo pre-v1 format unless a real user/dependency is discovered before the cutover.
+
+This explicitly supersedes the broader experimental GitMemo compatibility promise for the purpose of the rebrand.
+
+Once Runethread has external users, compatibility expectations become materially stricter and breaking identity migrations must no longer be treated this casually.
+
+## 15. Definition of migration success
+
+The cutover is complete only when:
+
+1. the authoritative implementation is `runethread/core`;
+2. current source/build/docs use Runethread naming consistently;
+3. the primary CLI is `runethread`;
+4. the module path is `github.com/runethread/core`;
+5. newly initialized memory repositories are Runethread-native and use `.runethread/`;
+6. the known private memory repository has been migrated and validated without UUID/data loss;
+7. project-specific memory/index metadata uses the Runethread project identity;
+8. GitMemo names remain only where historically truthful or intentionally retained for migration/history;
+9. historical GitMemo commits/tags/releases remain intact;
+10. future Core/MCP/Orchestrator work can proceed without carrying avoidable GitMemo aliases.
