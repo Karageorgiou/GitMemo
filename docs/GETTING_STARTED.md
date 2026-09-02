@@ -1,215 +1,172 @@
-# Getting started with GitMemo
+# Getting started with Runethread
 
-GitMemo gives an AI assistant a durable, user-owned memory repository backed by plain Git files.
+Runethread gives an AI assistant durable, user-owned memory backed by ordinary Git files.
 
-The public `GitMemo` repository contains the tooling and operational contract. Your actual memories belong in a separate private repository, conventionally named `GitMemo-memory`.
+The public implementation is `runethread/core`. Actual personal memory belongs in a separate private repository, conventionally named `runethread-memory`.
 
-For most users, the preferred setup is now the AI-first flow described by the public `README.md` and `AI_SETUP.md`. The local CLI remains the deterministic initialization, validation, search, and upgrade tool.
+For most users, the preferred setup is the AI-first flow in `README.md` and `AI_SETUP.md`. The CLI remains the deterministic local initialization, validation, search, index, and migration tool.
 
 ## Requirements
 
-For the downloadable release binary:
+For a prebuilt release binary:
 
-- Git is recommended and is initialized automatically by the first-run wizard when available;
-- a Git host such as GitHub, GitLab, or another private remote is recommended for durable remote storage;
-- an AI assistant must be able to access your private memory repository when you ask it to use GitMemo.
+- Git is recommended;
+- a private Git remote such as GitHub/GitLab is recommended for durable remote storage;
+- the AI client needs authorized access to the private memory repository.
 
-Go is **not required** when you use a prebuilt release binary. Go 1.23 or newer is only required when installing/building GitMemo from source.
+Go is not required for a prebuilt binary. Go is required only when installing/building from source. GitHub CLI (`gh`) is optional.
 
-GitHub CLI (`gh`) is optional but makes private-repository creation easier.
+## 1. Install Runethread
 
-## 1. Install GitMemo
+Download an official release binary and verify it against `SHA256SUMS.txt` when practical.
 
-### Download a release binary
+On Windows, running `runethread-windows-amd64.exe` without arguments launches the first-run wizard. It asks for a target directory (default `runethread-memory`), creates a native repository, initializes Git when available, and prints the remaining private-remote/AI-access steps.
 
-Download the binary for your platform from the latest stable GitHub release and verify it against `SHA256SUMS.txt` when practical.
-
-On Windows, double-clicking `gitmemo-windows-amd64.exe` with no command-line arguments launches the first-run wizard. The wizard:
-
-1. asks for a target directory, defaulting to `GitMemo-memory`;
-2. creates the self-describing GitMemo memory-repository skeleton;
-3. initializes a local Git repository on branch `main` when Git is installed; and
-4. prints the remaining steps for creating a private remote and connecting an AI assistant.
-
-The wizard does **not** create an online GitHub/GitLab account or private remote for you because GitMemo does not require any specific hosting provider or credentials.
-
-### Install with Go
+Install with Go from an immutable release tag:
 
 ```bash
-go install github.com/Karageorgiou/GitMemo/cmd/gitmemo@<release-tag>
+go install github.com/runethread/core/cmd/runethread@<release-tag>
 ```
 
-Use an official immutable release tag such as `v0.5.0`, not mutable `main`, for a user memory repository.
-
-Make sure your Go binary directory is on `PATH`.
-
-You can also clone this repository and build locally for development:
+For development only:
 
 ```bash
-git clone https://github.com/Karageorgiou/GitMemo.git
-cd GitMemo
-go build -o gitmemo ./cmd/gitmemo
+git clone https://github.com/runethread/core.git
+cd core
+go build -o runethread ./cmd/runethread
 ```
 
-## 2. Initialize your private memory repository
-
-If you are using a terminal instead of the first-run wizard:
+## 2. Initialize a private memory repository
 
 ```bash
-mkdir GitMemo-memory
-cd GitMemo-memory
+mkdir runethread-memory
+cd runethread-memory
 git init
-gitmemo init .
+runethread init .
 ```
 
-`gitmemo init` refuses to overwrite a non-empty directory. A directory containing only `.git` is allowed.
+`runethread init` refuses to overwrite a non-empty directory; a directory containing only `.git` is allowed.
 
-The generated repository contains:
+A native repository contains:
 
-- `MEMORY_PROTOCOL.md` — mandatory operating rules for AI assistants;
-- `docs/USER_COMMANDS.md` — the `store/search` command contract;
-- `docs/EXTENDING_GITMEMO.md` — category/schema-extension rules;
-- `docs/INDEX_FORMAT.md` — deterministic generated-index layout and freshness/fallback rules;
+- `MEMORY_PROTOCOL.md` — mandatory operating rules;
+- `docs/USER_COMMANDS.md` — the `store/search` contract;
+- `docs/EXTENDING_RUNETHREAD.md` — taxonomy/schema-extension rules;
+- `docs/INDEX_FORMAT.md` — deterministic Index v2 layout;
 - `schema/` and `templates/` — memory structure;
-- `memories/` — atomic durable memories;
+- `memories/` — canonical atomic memories;
 - `projects/` — concise project state views;
 - `index/` — generated retrieval acceleration;
-- `.gitmemo/config.json` — repository/schema/contract/tool version metadata;
-- `.gitmemo/lock.json` — immutable release pin and control-plane digests;
-- `.github/workflows/validate.yml` — stable read-only trust bootstrap that resolves and validates with the release pinned in the lock.
+- `.runethread/config.json` — compatibility/version metadata;
+- `.runethread/lock.json` — immutable release pin and control-plane digests;
+- `.github/workflows/validate.yml` — read-only trust/bootstrap validation workflow.
 
-## 3. Create the private remote repository
+## 3. Create a private remote
 
-### With GitHub CLI
-
-From inside `GitMemo-memory`:
+Using GitHub CLI:
 
 ```bash
 git add .
-git commit -m "Initialize GitMemo memory repository"
-gh repo create GitMemo-memory --private --source=. --remote=origin --push
+git commit -m "Initialize Runethread memory repository"
+gh repo create runethread-memory --private --source=. --remote=origin --push
 ```
 
-### With the GitHub website
+Or create an empty **private** repository in the Git host UI and push normally.
 
-Create a new **private** empty repository, for example `GitMemo-memory`, without a generated README, license, or `.gitignore`.
+Keep the repository private unless you intentionally choose to publish its contents.
 
-Then from your local memory directory:
+## 4. Give the AI authorized repository access
 
-```bash
-git add .
-git commit -m "Initialize GitMemo memory repository"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/GitMemo-memory.git
-git push -u origin main
-```
+Use the AI client's official Git-provider connection/authorization UI so it can read and, when desired, write the private repository.
 
-Keep this repository private unless you intentionally want to publish your memories.
+Never paste GitHub passwords, PATs, OAuth tokens, session cookies, SSH private keys, or equivalent credentials into chat.
 
-## 4. Give your AI assistant repository access
+Runethread itself does not require a hosted server and does not receive the user's memory data.
 
-Connect or authorize the Git provider you use so the assistant can read your private `GitMemo-memory` repository. The exact connection mechanism depends on the assistant and platform.
+## 5. Use Runethread from conversations
 
-GitMemo itself does not require a server and does not receive your memory data.
-
-## 5. Use GitMemo from any conversation
-
-Use two explicit natural-language commands:
+The two primary user commands are:
 
 ```text
-GitMemo: store ...
-GitMemo: search ...
+Runethread: store ...
+Runethread: search ...
 ```
 
 Examples:
 
 ```text
-GitMemo: store that I prefer verified outputs before claims of coding success.
+Runethread: store that I prefer verified outputs before claims of coding success.
+Runethread: search for my standing coding preferences.
 ```
 
-```text
-GitMemo: search for my standing coding preferences.
-```
+`store` means durable write. `search` is retrieval-only.
 
-`store` means durable write. `search` means retrieval-only.
-
-A fresh assistant should locate the private memory repository, verify/read the pinned operating contract, then follow the repository's rules rather than improvising its own memory format.
-
-When the local CLI is available, deterministic retrieval is also exposed as:
+Deterministic local search is also available:
 
 ```bash
-gitmemo search --root . "standing coding preferences"
+runethread search --root . "standing coding preferences"
 ```
 
-A full UUID passed as the query uses the exact-ID shard path. Ordinary text uses Index v2's inverted term index.
+A full UUID uses the exact-ID shard route; ordinary text uses Index v2's inverted term index.
 
 ## 6. Organize memories without changing the schema
 
-Most new categories belong in GitMemo's flexible retrieval taxonomy. Projects, topics, tags, aliases, and entities may be added when a genuinely new stable concept is needed.
-
-For example:
+Most categories belong in flexible retrieval metadata: projects, topics, tags, aliases, and entities.
 
 ```text
-GitMemo: store this under the topic home-automation.
+Runethread: store this under the topic home-automation.
 ```
 
-Adding a new core memory `type` is different because it can change schema and validation semantics. Normal assistants must not edit the local schema or invent a ninth core type as an ordinary memory write. See `docs/EXTENDING_GITMEMO.md`.
+Adding a core memory `type` is different because it changes semantic behavior and may require schema/validator/migration work. Normal memory operators must not invent a ninth core type or edit the pinned schema as a routine write. See `docs/EXTENDING_RUNETHREAD.md`.
 
-## 7. Upgrade an existing memory repository
+## 7. Upgrade or migrate a repository
 
-Existing repositories remain pinned to their current GitMemo release. Publishing a newer GitMemo release does not silently modify them.
-
-Install/download the newer GitMemo executable, then run it against the existing repository:
+Native repositories remain pinned until an explicit upgrade:
 
 ```bash
-gitmemo upgrade .
+runethread upgrade .
 ```
 
-The upgrader:
+Runethread v0.6.0 additionally recognizes exactly one trusted predecessor state: GitMemo v0.5.0 / format 1 / schema 1 / contract 6 / lock 1. That cutover is verified before any native files are written.
 
-1. reads `.gitmemo/config.json`;
-2. refuses repository/schema/contract versions newer than the running binary understands;
-3. updates GitMemo-managed operational contract/configuration files;
-4. preserves `memories/`, `projects/`, and unrelated user files;
-5. regenerates the complete deterministic index tree for the new release, removing obsolete generated index files from older formats;
-6. runs full repository validation; and
-7. rolls back managed/generated changes if validation fails.
+The v0.6 upgrader:
 
-If `.github/workflows/validate.yml` no longer looks GitMemo-managed, the upgrader refuses to overwrite it rather than destroying a custom workflow.
+1. detects native versus supported legacy metadata and refuses mixed state;
+2. verifies the exact supported source state;
+3. snapshots managed/generated paths;
+4. writes native `.runethread` metadata and pinned contract;
+5. preserves canonical `memories/`, `projects/`, and unrelated user files;
+6. rebuilds Index v2;
+7. validates the resulting repository; and
+8. restores the snapshot on a hard post-write failure.
 
-Commit and push the successful upgrade like any other repository change.
+A custom validation workflow is not overwritten silently.
 
-## 8. Index freshness and local validation
-
-From the memory repository:
+## 8. Index freshness and validation
 
 ```bash
-gitmemo index --check .
-gitmemo validate .
+runethread index --check .
+runethread validate .
 ```
 
-After a write that changes indexed memory metadata:
+After a write affecting indexed metadata:
 
 ```bash
-gitmemo index --write .
-gitmemo index --check .
-gitmemo validate .
+runethread index --write .
+runethread index --check .
+runethread validate .
 ```
 
-If a repository-writing client cannot execute the indexer, the generated index should be treated as potentially incomplete. When possible, explicitly mark that state:
+If a write-capable client cannot run the indexer, preserve or create the standard stale marker:
 
 ```bash
-gitmemo index --mark-stale .
+runethread index --mark-stale .
 ```
 
-or create/preserve the standard `index/STALE` marker according to the pinned contract. Do not hand-edit generated shards to imitate a fresh index.
-
-A stale index does not invalidate otherwise valid canonical memories. Repository search and canonical sidecars remain the fallback discovery path until regeneration succeeds.
-
-See `docs/INDEX_FORMAT.md` for the exact Index v2 layout.
+A stale index is degraded discovery, not loss of canonical memory. Use repository search/canonical sidecars until deterministic regeneration succeeds.
 
 ## Privacy and security
 
-GitMemo is not a secrets vault. Do not store passwords, API tokens, private keys, recovery codes, session credentials, banking credentials, or other authentication secrets.
+Runethread is not a secrets vault. Do not store passwords, API tokens, private keys, recovery codes, session credentials, banking credentials, or other authentication secrets.
 
-The memory repository is user-owned plain Git data. The public GitMemo project contains the tooling, not your personal memories.
+The user's memory repository is user-owned plain Git data. The public project contains tooling and release contracts, not personal memories.
