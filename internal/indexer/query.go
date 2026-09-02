@@ -173,7 +173,7 @@ func Search(root, query string, limit int) ([]SearchResult, error) {
 
 func ensureIndexUsable(root string) error {
 	if IsMarkedStale(root) {
-		return fmt.Errorf("GitMemo index is explicitly marked stale; regenerate it or fall back to canonical memories/repository search")
+		return fmt.Errorf("Runethread index is explicitly marked stale; regenerate it or fall back to canonical memories/repository search")
 	}
 	data, err := os.ReadFile(filepath.Join(root, "index", "catalog.json"))
 	if err != nil {
@@ -184,7 +184,7 @@ func ensureIndexUsable(root string) error {
 		return fmt.Errorf("parse index catalog: %w", err)
 	}
 	if cat.IndexVersion != IndexVersion {
-		return fmt.Errorf("unsupported GitMemo index version %d; this binary supports %d", cat.IndexVersion, IndexVersion)
+		return fmt.Errorf("unsupported Runethread index version %d; this binary supports %d", cat.IndexVersion, IndexVersion)
 	}
 	return nil
 }

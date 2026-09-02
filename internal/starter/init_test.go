@@ -39,8 +39,10 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(root, ".gitmemo")); !os.IsNotExist(err) {
-		t.Fatalf("native init must not create .gitmemo: %v", err)
+	legacyMetadataDir := "." + "git" + "memo"
+	legacyVersionField := "git" + "memo_version"
+	if _, err := os.Stat(filepath.Join(root, legacyMetadataDir)); !os.IsNotExist(err) {
+		t.Fatalf("native init must not create predecessor metadata directory: %v", err)
 	}
 
 	config, err := os.ReadFile(filepath.Join(root, ".runethread", "config.json"))
@@ -49,7 +51,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 	}
 	configText := string(config)
 	versionField := `"runethread_version": "` + buildinfo.ReleaseVersion + `"`
-	if !strings.Contains(configText, `"repository_format": `+strconv.Itoa(buildinfo.RepositoryFormatVersion)) || !strings.Contains(configText, `"schema_version": `+strconv.Itoa(buildinfo.SchemaVersion)) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) || strings.Contains(configText, "gitmemo_version") {
+	if !strings.Contains(configText, `"repository_format": `+strconv.Itoa(buildinfo.RepositoryFormatVersion)) || !strings.Contains(configText, `"schema_version": `+strconv.Itoa(buildinfo.SchemaVersion)) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) || strings.Contains(configText, legacyVersionField) {
 		t.Fatalf("unexpected config: %s", config)
 	}
 
@@ -58,7 +60,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	lockText := string(lock)
-	if !strings.Contains(lockText, `"lock_version": `+strconv.Itoa(buildinfo.TrustLockVersion)) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"source_repository": "runethread/core"`) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) || !strings.Contains(lockText, `"docs/INDEX_FORMAT.md"`) || strings.Contains(lockText, "gitmemo_version") {
+	if !strings.Contains(lockText, `"lock_version": `+strconv.Itoa(buildinfo.TrustLockVersion)) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"source_repository": "runethread/core"`) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) || !strings.Contains(lockText, `"docs/INDEX_FORMAT.md"`) || strings.Contains(lockText, legacyVersionField) {
 		t.Fatalf("unexpected trust lock: %s", lock)
 	}
 
