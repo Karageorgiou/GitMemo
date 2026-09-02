@@ -1,11 +1,14 @@
 package buildinfo
 
 const (
-	ReleaseVersion           = "v0.5.0"
-	RepositoryFormatVersion  = 1
+	ProductName              = "Runethread"
+	SourceRepository         = "runethread/core"
+	ManagedMetadataDir       = ".runethread"
+	ReleaseVersion           = "v0.6.0"
+	RepositoryFormatVersion  = 2
 	SchemaVersion            = 1
-	ContractVersion          = 6
+	ContractVersion          = 7
 	IndexFormatVersion       = 2
-	TrustLockVersion         = 1
-	BootstrapVerifierVersion = "v0.3.0"
+	TrustLockVersion         = 2
+	BootstrapVerifierVersion = "v0.6.0"
 )

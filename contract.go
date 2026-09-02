@@ -2,14 +2,15 @@ package gitmemo
 
 import "embed"
 
-// ContractFS contains the versioned operational contract that a GitMemo memory
-// repository needs in order to be self-describing to humans, LLMs, and tooling.
+// ContractFS contains the versioned operational contract that a Runethread
+// memory repository needs in order to be self-describing to humans, LLMs, and
+// tooling.
 //
-//go:embed MEMORY_PROTOCOL.md schema/memory-item.schema.json docs/MEMORY_SCHEMA.md docs/MEMORY_CONTENT_FORMAT.md docs/TAXONOMY.md docs/REPOSITORY_VALIDATION.md docs/USER_COMMANDS.md docs/EXTENDING_GITMEMO.md docs/TRUST_MODEL.md docs/SOURCES.md docs/INDEX_FORMAT.md templates/*.md
+//go:embed MEMORY_PROTOCOL.md schema/memory-item.schema.json docs/MEMORY_SCHEMA.md docs/MEMORY_CONTENT_FORMAT.md docs/TAXONOMY.md docs/REPOSITORY_VALIDATION.md docs/USER_COMMANDS.md docs/EXTENDING_RUNETHREAD.md docs/TRUST_MODEL.md docs/SOURCES.md docs/INDEX_FORMAT.md templates/*.md
 var ContractFS embed.FS
 
-// ContractPaths is the canonical set of operational-contract paths copied into
-// a new memory repository by `gitmemo init`.
+// contractPaths is the canonical set of operational-contract paths copied into
+// a new memory repository by `runethread init`.
 var contractPaths = []string{
 	"MEMORY_PROTOCOL.md",
 	"schema/memory-item.schema.json",
@@ -18,7 +19,7 @@ var contractPaths = []string{
 	"docs/TAXONOMY.md",
 	"docs/REPOSITORY_VALIDATION.md",
 	"docs/USER_COMMANDS.md",
-	"docs/EXTENDING_GITMEMO.md",
+	"docs/EXTENDING_RUNETHREAD.md",
 	"docs/TRUST_MODEL.md",
 	"docs/SOURCES.md",
 	"docs/INDEX_FORMAT.md",

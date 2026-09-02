@@ -19,14 +19,14 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		"README.md",
 		"MEMORY_PROTOCOL.md",
 		"docs/USER_COMMANDS.md",
-		"docs/EXTENDING_GITMEMO.md",
+		"docs/EXTENDING_RUNETHREAD.md",
 		"docs/TRUST_MODEL.md",
 		"docs/SOURCES.md",
 		"docs/INDEX_FORMAT.md",
 		"schema/memory-item.schema.json",
 		"templates/open_loop.md",
-		".gitmemo/config.json",
-		".gitmemo/lock.json",
+		".runethread/config.json",
+		".runethread/lock.json",
 		".github/workflows/validate.yml",
 		"memories/.gitkeep",
 		"projects/.gitkeep",
@@ -39,32 +39,35 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
 	}
+	if _, err := os.Stat(filepath.Join(root, ".gitmemo")); !os.IsNotExist(err) {
+		t.Fatalf("native init must not create .gitmemo: %v", err)
+	}
 
-	config, err := os.ReadFile(filepath.Join(root, ".gitmemo", "config.json"))
+	config, err := os.ReadFile(filepath.Join(root, ".runethread", "config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	configText := string(config)
-	versionField := `"gitmemo_version": "` + buildinfo.ReleaseVersion + `"`
-	if !strings.Contains(configText, `"repository_format": 1`) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) {
+	versionField := `"runethread_version": "` + buildinfo.ReleaseVersion + `"`
+	if !strings.Contains(configText, `"repository_format": `+strconv.Itoa(buildinfo.RepositoryFormatVersion)) || !strings.Contains(configText, `"schema_version": `+strconv.Itoa(buildinfo.SchemaVersion)) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) || strings.Contains(configText, "gitmemo_version") {
 		t.Fatalf("unexpected config: %s", config)
 	}
 
-	lock, err := os.ReadFile(filepath.Join(root, ".gitmemo", "lock.json"))
+	lock, err := os.ReadFile(filepath.Join(root, ".runethread", "lock.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	lockText := string(lock)
-	if !strings.Contains(lockText, `"lock_version": 1`) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) || !strings.Contains(lockText, `"docs/INDEX_FORMAT.md"`) {
+	if !strings.Contains(lockText, `"lock_version": `+strconv.Itoa(buildinfo.TrustLockVersion)) || !strings.Contains(lockText, versionField) || !strings.Contains(lockText, `"source_repository": "runethread/core"`) || !strings.Contains(lockText, `"contract_sha256"`) || !strings.Contains(lockText, `"docs/TRUST_MODEL.md"`) || !strings.Contains(lockText, `"docs/INDEX_FORMAT.md"`) || strings.Contains(lockText, "gitmemo_version") {
 		t.Fatalf("unexpected trust lock: %s", lock)
 	}
 
-	commands, err := os.ReadFile(filepath.Join(root, "docs", "USER_COMMANDS.md"))
+	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(commands), "GitMemo: store") || !strings.Contains(string(commands), "GitMemo: search") {
-		t.Fatalf("command contract missing store/search interface: %s", commands)
+	if !strings.Contains(string(readme), "Runethread: store") || !strings.Contains(string(readme), ".runethread/lock.json") {
+		t.Fatalf("native README does not expose Runethread identity: %s", readme)
 	}
 
 	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "validate.yml"))
@@ -72,8 +75,8 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflowText := string(workflow)
-	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "@"+buildinfo.BootstrapVerifierVersion) || !strings.Contains(workflowText, "trust version") || !strings.Contains(workflowText, "Stable bootstrap workflow v1") {
-		t.Fatalf("validation workflow is not the stable read-only trust bootstrap: %s", workflow)
+	if !strings.Contains(workflowText, "contents: read") || !strings.Contains(workflowText, "github.com/runethread/core/cmd/runethread@"+buildinfo.BootstrapVerifierVersion) || !strings.Contains(workflowText, "trust version") || !strings.Contains(workflowText, "Managed by Runethread") {
+		t.Fatalf("validation workflow is not the native read-only trust bootstrap: %s", workflow)
 	}
 }
 

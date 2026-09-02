@@ -1,0 +1,30 @@
+{
+  "lock_version": 1,
+  "source_repository": "Karageorgiou/GitMemo",
+  "gitmemo_version": "v0.5.0",
+  "repository_format": 1,
+  "schema_version": 1,
+  "contract_version": 6,
+  "contract_sha256": "d1ac047361967e67db3e35de040237c9bb3be55ba16c0b95cac9ee6287e9c67a",
+  "files_sha256": {
+    "MEMORY_PROTOCOL.md": "32bae1248227b2372829955dee6171d69004d183b39278c7cab62e5e795ec6f0",
+    "docs/EXTENDING_GITMEMO.md": "1f18d297ce0ec13a018d8d772653876726c8880a0076882b32747227c8fcf69c",
+    "docs/INDEX_FORMAT.md": "887c83b53c52c812a0cc22c1dd897de91a48285e59560a083ecdc987b3645855",
+    "docs/MEMORY_CONTENT_FORMAT.md": "989195209f3d008365f31c6492fad3175418c19d54a62c0280b502d08ce28c8e",
+    "docs/MEMORY_SCHEMA.md": "42736c5a46fa7f3d81c16d4680f576e51bf694f74655d7ee63a410af6aaa8452",
+    "docs/REPOSITORY_VALIDATION.md": "56ee6342279286216e41c8960f7f9eee06119cffc2fe5cf78ebe7caa07711a38",
+    "docs/SOURCES.md": "0c40e73c20882b38ab9acede7372dc4b0dfa22c84d0189e836073dedd98d2988",
+    "docs/TAXONOMY.md": "3b789082c273e606a0b804d7cb9203f4777f6083eb791a670d8b0dd77efb7bd7",
+    "docs/TRUST_MODEL.md": "f9ee899c73b1924c6bc5d2d4e2d9cc32c003d54b95976f749b6e936dee2865c9",
+    "docs/USER_COMMANDS.md": "865e22dcd6d87a9845b8c2fae27155b47b40eb93cd94056100c320568252a76e",
+    "schema/memory-item.schema.json": "b4d03cb3fa85e95c98275701ffb44c4a14088bcf0b41cfb6a9dc5a092ab3b69a",
+    "templates/correction.md": "400a57ac853a3e28381235094401fadeebba1bc3e18745295e85e267b080dfc6",
+    "templates/decision.md": "facbf0490a5e138f43a73636a8b8341764bc055d1df03907ed30ebaa04d8038b",
+    "templates/fact.md": "d3d03a2277654875677eb9641f7073beb11e1072f78244135018dc6cdc05c226",
+    "templates/milestone.md": "8c54066877448dc1fea9277bdfb65ed4cb6e51197ad328e52f9215f7c0e96061",
+    "templates/open_loop.md": "35c7a3091de80a0e2258ae33dd72b51390fbbfd92aebe0be55e65a9e04ef1f8d",
+    "templates/preference.md": "f909733d2efd7994a92427328bbe6ba700ca500f358cbae342c357577f81cb63",
+    "templates/reference.md": "9dade8d57fa99a1e3ae156ad6e7677cc06b246f0cd57bcb6ce9de71a346ee307",
+    "templates/state.md": "a83248bd386bbbebec16525be3f687be995bc33b697845a864cd5214baf8c6ce"
+  }
+}
