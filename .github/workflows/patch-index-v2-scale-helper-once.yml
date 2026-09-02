@@ -1,0 +1,51 @@
+name: Patch Index v2 Scale Helper Once
+
+on:
+  push:
+    branches:
+      - feat/index-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Refactor machine renderer for synthetic scale tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('internal/indexer/machine.go')
+          s = p.read_text()
+          old = '''func renderMachineIndexes(root string, records []memory.Record) (map[string][]byte, error) {\n\tfiles := map[string][]byte{}'''
+          new = '''func renderMachineIndexes(root string, records []memory.Record) (map[string][]byte, error) {\n\tdigest, err := memorySourceDigest(root, records)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn renderMachineIndexesWithDigest(records, digest)\n}\n\nfunc renderMachineIndexesWithDigest(records []memory.Record, digest string) (map[string][]byte, error) {\n\tfiles := map[string][]byte{}'''
+          if old not in s:
+              raise SystemExit('renderMachineIndexes function start not found')
+          s = s.replace(old, new, 1)
+          old = '''\n\tdigest, err := memorySourceDigest(root, records)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tcat := catalog{'''
+          new = '''\n\tcat := catalog{'''
+          if old not in s:
+              raise SystemExit('digest block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          gofmt -w internal/indexer/machine.go
+          go test ./...
+          go vet ./...
+
+      - name: Commit helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/indexer/machine.go
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "test: expose deterministic renderer seam for scale tests"
+            git push
+          fi
