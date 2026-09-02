@@ -2,7 +2,7 @@
 
 Status: **Proposed**
 
-This roadmap sequences the work so each stage proves one architectural assumption before adding another dependency.
+This roadmap sequences the work so identity is made coherent while the project is still pre-v1, then each engineering stage proves one architectural assumption before adding another dependency.
 
 ## Phase 0 — architecture freeze
 
@@ -11,20 +11,61 @@ Goal: define boundaries before implementation changes.
 Deliverables:
 
 - system architecture;
-- GitMemo -> Runethread migration strategy;
-- ADR catalog for canonical ownership, deterministic Core, two-phase mutation, concurrency, orchestration, worker abstraction, worktree isolation, permissions, migration compatibility, and repository topology;
+- clean GitMemo -> Runethread cutover strategy;
+- ADR catalog for canonical ownership, deterministic Core, two-phase mutation, concurrency, orchestration, worker abstraction, worktree isolation, permissions, migration, and repository topology;
 - explicit non-goals;
 - security/trust boundary carried forward from GitMemo.
 
 Exit criteria:
 
 - architecture is reviewable as documentation-only changes;
-- no code/module/repository-format rename has occurred;
-- unresolved architecture questions are recorded rather than hidden in implementation.
+- no code/module/repository-format rename has occurred yet;
+- unresolved architecture questions are recorded rather than hidden in implementation;
+- ADRs define the target Runethread-native identity and migration invariants.
 
-## Phase 1 — deterministic Core mutation service
+## Phase 1 — controlled Runethread identity cutover
 
-Goal: make the current memory engine usable through a small deterministic application boundary.
+Goal: remove avoidable GitMemo naming before substantial new APIs and integrations are built.
+
+Target identity:
+
+```text
+implementation       runethread/core
+Go module            github.com/runethread/core
+CLI                  runethread
+native metadata      .runethread/
+private repo naming  <user>/runethread-memory
+first RT release     v0.6.0
+```
+
+Primary work:
+
+- preserve Git history while transferring/renaming the implementation repository;
+- update Go module/import identity;
+- rename CLI entry point and user-facing commands;
+- convert setup/bootstrap/release/template identity to Runethread;
+- define the native `.runethread/` config/lock format;
+- implement/test deterministic migration from the known GitMemo v0.5.0 source state;
+- migrate the known private memory repository without replacing canonical UUID identities;
+- change project slug/metadata from `gitmemo` to `runethread` where semantically appropriate;
+- review the small project-memory set for product-name references rather than global search/replace;
+- regenerate derived indexes;
+- preserve historical GitMemo tags/releases/commits as immutable history;
+- retain an explicit pre-migration recovery point.
+
+Exit criteria:
+
+- current implementation identity is consistently Runethread;
+- `go test ./...` and all release gates pass under the new module identity;
+- newly initialized repositories are Runethread-native;
+- migrated private memory repository passes full validation;
+- migrated memory count and UUID set match the pre-migration snapshot exactly;
+- no unintended GitMemo operational identifiers remain in current native state;
+- historical GitMemo releases remain reachable and unmodified.
+
+## Phase 2 — deterministic Core mutation service
+
+Goal: make the memory engine usable through a small deterministic application boundary under the final Runethread identity.
 
 Primary work:
 
@@ -49,14 +90,14 @@ Supporting work:
 - machine-readable result/error contracts;
 - JSON CLI output suitable for automation.
 
-Suggested CLI evolution while still under GitMemo compatibility:
+Suggested CLI:
 
 ```text
-gitmemo get --json
-gitmemo prepare --json
-gitmemo apply --json
-gitmemo withdraw --json
-gitmemo status --json
+runethread get --json
+runethread prepare --json
+runethread apply --json
+runethread withdraw --json
+runethread status --json
 ```
 
 Exit criteria:
@@ -66,7 +107,7 @@ Exit criteria:
 - a failed hard validation cannot produce a successful commit/result;
 - tests verify rollback and concurrency failure modes.
 
-## Phase 2 — local MCP adapter
+## Phase 3 — local MCP adapter
 
 Goal: expose Core operations to compatible AI clients without duplicating business logic.
 
@@ -96,7 +137,7 @@ Exit criteria:
 - a compatible external AI client can retrieve and mutate memory through Core without understanding repository layout;
 - MCP-specific code contains transport translation, not repository business rules.
 
-## Phase 3 — Orchestrator skeleton
+## Phase 4 — Orchestrator skeleton
 
 Goal: prove the execution control plane without paying for or depending on real model workers.
 
@@ -134,7 +175,7 @@ Exit criteria:
 - invalid state transitions are rejected;
 - no AI provider is required for tests.
 
-## Phase 4 — Codex worker
+## Phase 5 — Codex worker
 
 Goal: prove safe delegated code execution.
 
@@ -169,11 +210,11 @@ Exit criteria:
 - failed execution is distinguishable from failed verification;
 - task cancellation and approval pauses are tested.
 
-## Phase 5 — general agent worker
+## Phase 6 — general agent worker
 
 Goal: support substantial non-coding delegated work.
 
-Implement a provider adapter initially using an appropriate OpenAI agent/Responses surface, while keeping the worker interface provider-independent.
+Implement a provider adapter initially using an appropriate agent/API surface while keeping the worker interface provider-independent.
 
 Capabilities may include:
 
@@ -189,7 +230,7 @@ Exit criteria:
 - provider-specific conversation/thread identifiers remain confined to adapter/runtime metadata;
 - paid API usage can be disabled without breaking Core or Codex/local workflows.
 
-## Phase 6 — project context aggregation
+## Phase 7 — project context aggregation
 
 Goal: make chat/session replacement cheap and reliable.
 
@@ -213,7 +254,7 @@ Exit criteria:
 - project source truth is referenced rather than duplicated into personal memory;
 - stale task/runtime metadata is clearly distinguished from canonical project Git state.
 
-## Phase 7 — remote MCP / normal-chat integration
+## Phase 8 — remote MCP / normal-chat integration
 
 Goal: make ordinary AI chat the front door where product/platform support permits it.
 
@@ -233,27 +274,27 @@ Exit criteria:
 - writes retain the same Core/Orchestrator invariants as local calls;
 - changing ChatGPT/other-client integration APIs does not require changing canonical storage.
 
-## Phase 8 — public Runethread migration
+## Phase 9 — hardening and public readiness
 
-Goal: move from GitMemo identity to Runethread without breaking supported repositories.
+Goal: make the now-Runethread-native system safe for external users before compatibility becomes expensive.
 
 Work includes:
 
-- bridge GitMemo release;
-- historical compatibility fixtures;
-- transfer/preservation of implementation Git history;
-- `runethread/core` establishment;
-- new CLI/module identity;
-- new generated memory template;
-- documentation/domain transition;
-- legacy validation and upgrade support.
+- release regression fixtures beginning with the first public Runethread-native format;
+- migration fixtures for the one historical GitMemo v0.5.0 cutover source state;
+- broader fuzz/property coverage;
+- cross-platform CI/release verification;
+- threat-model review;
+- installation/doctor UX;
+- release signing/SBOM/dependency scanning where practical;
+- public documentation under `runethread.dev`;
+- organization/repository protection policy.
 
 Exit criteria:
 
-- new users install Runethread directly;
-- existing GitMemo repositories remain supported;
-- historical GitMemo releases/tags remain immutable and meaningful;
-- compatibility tests cover every officially supported legacy repository format.
+- new users install Runethread without requiring GitMemo knowledge;
+- a supported release compatibility policy is stated for Runethread going forward;
+- recovery and migration behavior is tested before external adoption raises the cost of breaking changes.
 
 ## Later, only when justified
 
@@ -271,6 +312,8 @@ Possible future work:
 
 ## Immediate next engineering milestone
 
-After Phase 0 review, the first code milestone should be:
+After Phase 0 ADR review, the next milestone is **not** a new memory API. It is the clean identity cutover:
 
-> A deterministic `MemoryService` can prepare and apply a memory mutation against an expected Git revision, validate the final repository, and reject/roll back unsafe or stale writes without an AI model participating in repository integrity.
+> Preserve Git and canonical memory history while moving the implementation to `runethread/core`, converting current product/module/CLI/native-repository identifiers to Runethread, and deterministically migrating the known GitMemo v0.5.0 private memory repository with identical UUID membership and full post-migration validation.
+
+Only after that cutover is verified should new Core APIs, MCP surfaces, and Orchestrator components be built.
