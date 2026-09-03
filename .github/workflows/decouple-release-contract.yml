@@ -45,6 +45,7 @@ jobs:
             internal/trust/lock.go \
             internal/upgrader/native_previous.go \
             internal/upgrader/upgrader.go \
+            internal/upgrader/upgrader_test.go \
             internal/upgrader/release_compatibility_test.go \
             internal/trust/release_compatibility_test.go
 
@@ -118,6 +119,7 @@ jobs:
             internal/starter/init.go \
             internal/upgrader/native_previous.go \
             internal/upgrader/upgrader.go \
+            internal/upgrader/upgrader_test.go \
             internal/upgrader/release_compatibility_test.go \
             docs/runethread/MEMORY_SERVICE.md \
             docs/adr/README.md \
