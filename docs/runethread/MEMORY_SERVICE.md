@@ -84,6 +84,8 @@ Successful results are written to stdout. Structured errors are written to stder
 
 Malformed command/request input exits with code 2. MemoryService/repository failures exit with code 1.
 
+`status` reports both `release_version` for the running executable and `contract_release_version` for the immutable control-plane release embedded by that runtime. They may differ for executable-only releases while trust and compatibility dimensions remain unchanged.
+
 ## Apply request shape
 
 ```json
