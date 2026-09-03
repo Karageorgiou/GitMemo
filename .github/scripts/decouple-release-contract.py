@@ -34,16 +34,6 @@ replace_exact(
 
 replace_exact(
     "internal/starter/init.go",
-    "- `.runethread/config.json` — repository, schema, contract, and tooling version metadata.",
-    "- `.runethread/config.json` — repository, schema, contract, and pinned control-plane release metadata.",
-)
-replace_exact(
-    "internal/starter/init.go",
-    "- `.runethread/lock.json` — release pin and SHA-256 control-plane digests.",
-    "- `.runethread/lock.json` — control-plane release pin and SHA-256 control-plane digests.",
-)
-replace_exact(
-    "internal/starter/init.go",
     "\t\tRunethreadVersion: buildinfo.ReleaseVersion,",
     "\t\tRunethreadVersion: buildinfo.ContractReleaseVersion,",
 )
