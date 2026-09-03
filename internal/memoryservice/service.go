@@ -329,7 +329,7 @@ func legalOperations(candidates []Document) []string {
 		operations["correct"] = true
 		operations["supersede"] = true
 		operations["withdraw"] = true
-		if candidate.Memory.Type == "open_loop" {
+		if candidate.Memory.Type == "open_loop" && isUnresolvedOpenLoop(candidate.Memory.OpenLoopStatus) {
 			operations["resolve"] = true
 		}
 	}
