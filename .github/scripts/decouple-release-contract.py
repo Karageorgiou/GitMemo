@@ -101,6 +101,11 @@ func checkNativeCompatibilityFor(cfg repositoryConfig, runtimeRelease, contractR
 \treturn nil
 }'''
 replace_exact("internal/upgrader/upgrader.go", old_compat, new_compat)
+replace_exact(
+    "internal/upgrader/upgrader_test.go",
+    "\t\tRunethreadVersion: buildinfo.ReleaseVersion,",
+    "\t\tRunethreadVersion: buildinfo.ContractReleaseVersion,",
+)
 
 replace_exact(
     "docs/runethread/MEMORY_SERVICE.md",
