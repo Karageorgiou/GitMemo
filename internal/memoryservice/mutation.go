@@ -22,10 +22,10 @@ import (
 
 const (
 	CodeUnsupportedOperation = "unsupported_operation"
-	CodeStaleRevision       = "stale_revision"
-	CodeIdempotencyConflict = "idempotency_conflict"
-	CodeValidationFailed    = "validation_failed"
-	CodeTransactionFailed   = "transaction_failed"
+	CodeStaleRevision        = "stale_revision"
+	CodeIdempotencyConflict  = "idempotency_conflict"
+	CodeValidationFailed     = "validation_failed"
+	CodeTransactionFailed    = "transaction_failed"
 )
 
 var (
@@ -474,13 +474,13 @@ func applyWithdrawal(root string, request ApplyMutationRequest) (mutationPlan, e
 
 func cloneProposed(proposal ProposedDocument) ProposedDocument {
 	copy := proposal
-	copy.Memory.Projects = append([]string(nil), proposal.Memory.Projects...)
-	copy.Memory.Topics = append([]string(nil), proposal.Memory.Topics...)
-	copy.Memory.Tags = append([]string(nil), proposal.Memory.Tags...)
-	copy.Memory.Aliases = append([]string(nil), proposal.Memory.Aliases...)
-	copy.Memory.Entities = append([]memory.Entity(nil), proposal.Memory.Entities...)
-	copy.Memory.Relationships = append([]memory.Relationship(nil), proposal.Memory.Relationships...)
-	copy.Memory.Provenance.Sources = append([]memory.Source(nil), proposal.Memory.Provenance.Sources...)
+	copy.Memory.Projects = append([]string{}, proposal.Memory.Projects...)
+	copy.Memory.Topics = append([]string{}, proposal.Memory.Topics...)
+	copy.Memory.Tags = append([]string{}, proposal.Memory.Tags...)
+	copy.Memory.Aliases = append([]string{}, proposal.Memory.Aliases...)
+	copy.Memory.Entities = append([]memory.Entity{}, proposal.Memory.Entities...)
+	copy.Memory.Relationships = append([]memory.Relationship{}, proposal.Memory.Relationships...)
+	copy.Memory.Provenance.Sources = append([]memory.Source{}, proposal.Memory.Provenance.Sources...)
 	return copy
 }
 
@@ -528,13 +528,19 @@ func writeProposedDocument(root string, existing *Document, proposal ProposedDoc
 		return Document{}, errorf(CodeInvalidArgument, "apply", nil, "proposed memory is invalid: %s", problems[0].Error())
 	}
 
-	if existing == nil {
-		for _, rel := range []string{markdownRel, sidecarRel} {
-			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
-				return Document{}, errorf(CodeInvalidArgument, "apply", nil, "canonical path %s already exists", rel)
-			} else if !os.IsNotExist(err) {
-				return Document{}, errorf(CodeTransactionFailed, "apply", err, "inspect canonical path %s: %v", rel, err)
-			}
+	allowedExisting := map[string]bool{}
+	if existing != nil {
+		allowedExisting[existing.MarkdownPath] = true
+		allowedExisting[existing.SidecarPath] = true
+	}
+	for _, rel := range []string{markdownRel, sidecarRel} {
+		if allowedExisting[rel] {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+			return Document{}, errorf(CodeInvalidArgument, "apply", nil, "canonical path %s already exists", rel)
+		} else if !os.IsNotExist(err) {
+			return Document{}, errorf(CodeTransactionFailed, "apply", err, "inspect canonical path %s: %v", rel, err)
 		}
 	}
 	for _, rel := range []string{markdownRel, sidecarRel} {
