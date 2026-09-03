@@ -1,6 +1,7 @@
 package upgrader
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/fs"
 	"os"
@@ -297,4 +298,96 @@ func mustRead(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func TestApplyUpgradesExactNativeV060SourceWithoutChangingCanonicalData(t *testing.T) {
+	root := previousNativeFixture(t)
+	memoryJSON, memoryMD := writeFixtureMemory(t, root, false)
+	if err := indexer.Write(root); err != nil {
+		t.Fatal(err)
+	}
+	beforeJSON := mustRead(t, memoryJSON)
+	beforeMD := mustRead(t, memoryMD)
+	beforeCatalog := mustRead(t, filepath.Join(root, "index", "catalog.json"))
+
+	result, err := Apply(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FromVersion != previousNativeReleaseVersion || result.ToVersion != buildinfo.ReleaseVersion {
+		t.Fatalf("unexpected native migration result: %#v", result)
+	}
+	if result.FromContract != buildinfo.ContractVersion || result.ToContract != buildinfo.ContractVersion {
+		t.Fatalf("native migration unexpectedly changed contract version: %#v", result)
+	}
+	if got := strings.Join(result.ChangedPaths, ","); got != ".runethread/config.json,.runethread/lock.json" {
+		t.Fatalf("native v0.6 -> v0.7 changed paths = %s", got)
+	}
+	if got := mustRead(t, memoryJSON); !bytes.Equal(got, beforeJSON) {
+		t.Fatal("canonical memory JSON changed during native release repin")
+	}
+	if got := mustRead(t, memoryMD); !bytes.Equal(got, beforeMD) {
+		t.Fatal("canonical memory Markdown changed during native release repin")
+	}
+	if got := mustRead(t, filepath.Join(root, "index", "catalog.json")); !bytes.Equal(got, beforeCatalog) {
+		t.Fatal("memory-derived catalog changed during metadata-only native repin")
+	}
+	if problems := trust.Check(root); len(problems) != 0 {
+		t.Fatalf("target trust check failed: %+v", problems)
+	}
+	if stale, err := indexer.Check(root); err != nil || len(stale) != 0 {
+		t.Fatalf("target index is not fresh: stale=%v err=%v", stale, err)
+	}
+}
+
+func TestApplyRefusesTamperedNativeV060SourceBeforeWriting(t *testing.T) {
+	root := previousNativeFixture(t)
+	path := filepath.Join(root, "docs", "TRUST_MODEL.md")
+	mustWrite(t, path, append(mustRead(t, path), []byte("\ntampered\n")...))
+	configBefore := mustRead(t, filepath.Join(root, ".runethread", "config.json"))
+	lockBefore := mustRead(t, filepath.Join(root, ".runethread", "lock.json"))
+
+	if _, err := Apply(root); err == nil || !strings.Contains(err.Error(), "digest") {
+		t.Fatalf("expected trusted native-source digest refusal, got %v", err)
+	}
+	if got := mustRead(t, filepath.Join(root, ".runethread", "config.json")); !bytes.Equal(got, configBefore) {
+		t.Fatal("native config changed despite preflight refusal")
+	}
+	if got := mustRead(t, filepath.Join(root, ".runethread", "lock.json")); !bytes.Equal(got, lockBefore) {
+		t.Fatal("native lock changed despite preflight refusal")
+	}
+}
+
+func previousNativeFixture(t *testing.T) string {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), "memory")
+	if err := starter.Init(root); err != nil {
+		t.Fatal(err)
+	}
+	cfg := repositoryConfig{
+		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
+		SchemaVersion:     buildinfo.SchemaVersion,
+		ContractVersion:   buildinfo.ContractVersion,
+		RunethreadVersion: previousNativeReleaseVersion,
+	}
+	configData, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(root, ".runethread", "config.json"), append(configData, '\n'))
+
+	lock, err := trust.ExpectedLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock.ContractSHA256 != previousNativeContractSHA256 {
+		t.Fatalf("current embedded contract digest %s does not match pinned v0.6 digest %s", lock.ContractSHA256, previousNativeContractSHA256)
+	}
+	lock.RunethreadVersion = previousNativeReleaseVersion
+	lockData, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(root, ".runethread", "lock.json"), append(lockData, '\n'))
+	return root
 }

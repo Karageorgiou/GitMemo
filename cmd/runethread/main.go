@@ -37,6 +37,16 @@ func run(args []string) int {
 		return runIndex(args[1:])
 	case "search":
 		return runSearch(args[1:])
+	case "get":
+		return runGet(args[1:])
+	case "prepare":
+		return runPrepare(args[1:])
+	case "apply":
+		return runApply(args[1:])
+	case "withdraw":
+		return runWithdraw(args[1:])
+	case "status":
+		return runStatus(args[1:])
 	case "trust":
 		return runTrust(args[1:])
 	case "version":
@@ -276,5 +286,5 @@ func isInteractive(file *os.File) bool {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Runethread repository tooling\n\nUsage:\n  runethread init [dir]\n  runethread upgrade [root]\n  runethread validate [--json] [root]\n  runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  runethread index --check [root]\n  runethread index --write [root]\n  runethread index --mark-stale [root]\n  runethread trust version [root]\n  runethread version")
+	fmt.Fprintln(os.Stderr, "Runethread repository tooling\n\nUsage:\n  runethread init [dir]\n  runethread upgrade [root]\n  runethread validate [--json] [root]\n  runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  runethread get [--root DIR] [--json] <uuid>\n  runethread prepare [--root DIR] [--json] [--request FILE|-]\n  runethread apply [--root DIR] [--json] [--request FILE|-]\n  runethread withdraw [--root DIR] [--json] [--request FILE|-]\n  runethread status [--root DIR] [--json]\n  runethread index --check [root]\n  runethread index --write [root]\n  runethread index --mark-stale [root]\n  runethread trust version [root]\n  runethread version")
 }
