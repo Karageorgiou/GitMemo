@@ -1,0 +1,98 @@
+name: Phase 2 mutation fix
+
+on:
+  push:
+    branches:
+      - runethread/phase-2-memory-service
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Phase 2 branch
+        uses: actions/checkout@v7
+        with:
+          ref: runethread/phase-2-memory-service
+          fetch-depth: 0
+
+      - name: Apply exact mutation safety fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('internal/memoryservice/mutation.go')
+          text = path.read_text()
+
+          old_clone = '''\tcopy.Memory.Projects = append([]string(nil), proposal.Memory.Projects...)
+          \tcopy.Memory.Topics = append([]string(nil), proposal.Memory.Topics...)
+          \tcopy.Memory.Tags = append([]string(nil), proposal.Memory.Tags...)
+          \tcopy.Memory.Aliases = append([]string(nil), proposal.Memory.Aliases...)
+          \tcopy.Memory.Entities = append([]memory.Entity(nil), proposal.Memory.Entities...)
+          \tcopy.Memory.Relationships = append([]memory.Relationship(nil), proposal.Memory.Relationships...)
+          \tcopy.Memory.Provenance.Sources = append([]memory.Source(nil), proposal.Memory.Provenance.Sources...)'''.replace('          \t', '\t')
+          new_clone = '''\tcopy.Memory.Projects = append([]string{}, proposal.Memory.Projects...)
+          \tcopy.Memory.Topics = append([]string{}, proposal.Memory.Topics...)
+          \tcopy.Memory.Tags = append([]string{}, proposal.Memory.Tags...)
+          \tcopy.Memory.Aliases = append([]string{}, proposal.Memory.Aliases...)
+          \tcopy.Memory.Entities = append([]memory.Entity{}, proposal.Memory.Entities...)
+          \tcopy.Memory.Relationships = append([]memory.Relationship{}, proposal.Memory.Relationships...)
+          \tcopy.Memory.Provenance.Sources = append([]memory.Source{}, proposal.Memory.Provenance.Sources...)'''.replace('          \t', '\t')
+
+          old_collision = '''\tif existing == nil {
+          \t\tfor _, rel := range []string{markdownRel, sidecarRel} {
+          \t\t\tif _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+          \t\t\t\treturn Document{}, errorf(CodeInvalidArgument, "apply", nil, "canonical path %s already exists", rel)
+          \t\t\t} else if !os.IsNotExist(err) {
+          \t\t\t\treturn Document{}, errorf(CodeTransactionFailed, "apply", err, "inspect canonical path %s: %v", rel, err)
+          \t\t\t}
+          \t\t}
+          \t}'''.replace('          \t', '\t')
+          new_collision = '''\tallowedExisting := map[string]bool{}
+          \tif existing != nil {
+          \t\tallowedExisting[existing.MarkdownPath] = true
+          \t\tallowedExisting[existing.SidecarPath] = true
+          \t}
+          \tfor _, rel := range []string{markdownRel, sidecarRel} {
+          \t\tif allowedExisting[rel] {
+          \t\t\tcontinue
+          \t\t}
+          \t\tif _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+          \t\t\treturn Document{}, errorf(CodeInvalidArgument, "apply", nil, "canonical path %s already exists", rel)
+          \t\t} else if !os.IsNotExist(err) {
+          \t\t\treturn Document{}, errorf(CodeTransactionFailed, "apply", err, "inspect canonical path %s: %v", rel, err)
+          \t\t}
+          \t}'''.replace('          \t', '\t')
+
+          if old_clone not in text:
+              raise SystemExit('expected cloneProposed block not found')
+          if old_collision not in text:
+              raise SystemExit('expected canonical collision block not found')
+
+          text = text.replace(old_clone, new_clone, 1)
+          text = text.replace(old_collision, new_collision, 1)
+          path.write_text(text)
+          PY
+          gofmt -w internal/memoryservice/mutation.go
+
+          changed="$(git diff --name-only)"
+          test "$changed" = "internal/memoryservice/mutation.go"
+
+      - name: Verify mutation and repository packages
+        run: go test ./internal/memoryservice ./internal/repository
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/memoryservice/mutation.go
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: preserve memory arrays and reject path collisions'
+          git push origin HEAD:runethread/phase-2-memory-service
