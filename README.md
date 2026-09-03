@@ -83,7 +83,7 @@ This public repository must not contain a user's personal memory database. The p
 
 ## Native repository format and trust
 
-Runethread v0.6.0 uses native managed metadata under:
+Runethread uses native managed metadata under:
 
 ```text
 .runethread/config.json
@@ -116,7 +116,7 @@ runethread upgrade [root]
 
 The upgrader snapshots managed/generated state, applies only a supported migration, rebuilds indexes, validates the resulting repository, and restores the snapshot if a hard post-write check fails.
 
-Runethread v0.6.0 also contains one deliberately narrow predecessor migration: an exact trusted GitMemo v0.5.0 repository (`repository_format` 1, schema 1, contract 6, lock 1) can be migrated to the native Runethread format. Unknown, mixed, or tampered legacy control state is refused rather than guessed. Historical GitMemo releases remain immutable history; the legacy name is not a second native Runethread interface.
+Runethread v0.7.0 upgrades an exact trusted v0.6.0 native repository by repinning only compatible managed release metadata and trust state; canonical memories/projects remain untouched and indexes are deterministically rebuilt. The deliberately narrow GitMemo predecessor bridge also remains available: an exact trusted GitMemo v0.5.0 repository (`repository_format` 1, schema 1, contract 6, lock 1) can migrate directly to the current native Runethread state. Unknown, mixed, or tampered control state is refused rather than guessed.
 
 ---
 
@@ -171,6 +171,11 @@ runethread init [dir]
 runethread upgrade [root]
 runethread validate [--json] [root]
 runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>
+runethread get [--root DIR] [--json] <uuid>
+runethread prepare [--root DIR] [--json] [--request FILE|-]
+runethread apply [--root DIR] [--json] [--request FILE|-]
+runethread withdraw [--root DIR] [--json] [--request FILE|-]
+runethread status [--root DIR] [--json]
 runethread index --check [root]
 runethread index --write [root]
 runethread index --mark-stale [root]
@@ -181,6 +186,8 @@ runethread version
 `runethread init` creates a self-describing native repository and refuses to overwrite a non-empty target.
 
 `runethread search` uses deterministic Index v2. A full UUID is routed directly to its UUID shard; ordinary language uses the hash-sharded inverted term index. Search results are discovery metadata and point back to canonical atomic memory files.
+
+The Phase 2 MemoryService commands provide the deterministic automation boundary for retrieval and writes. `prepare` is read-only and returns an expected Git revision; `apply` and `withdraw` validate in an isolated worktree and publish only if that revision is still current. See [`docs/runethread/MEMORY_SERVICE.md`](docs/runethread/MEMORY_SERVICE.md).
 
 `runethread index --mark-stale` records that generated discovery data may be incomplete when a source write cannot immediately be followed by deterministic regeneration.
 

@@ -88,9 +88,9 @@ type snapshot struct {
 
 // Apply upgrades a supported memory repository to the Runethread contract
 // embedded in the running binary. Native Runethread repositories are updated in
-// place. The only legacy source accepted by v0.6.0 is the exact trusted GitMemo
-// v0.5.0 format-1 state. User memories and project data are never rewritten by
-// this operation.
+// place. Runethread v0.7.0 accepts the exact trusted v0.6.0 native state and the
+// exact trusted GitMemo v0.5.0 format-1 predecessor state. User memories and
+// project data are never rewritten by this operation.
 func Apply(root string) (Result, error) {
 	state, err := inspectSource(root)
 	if err != nil {
@@ -243,6 +243,9 @@ func inspectSource(root string) (sourceState, error) {
 		if err := checkNativeCompatibility(cfg); err != nil {
 			return sourceState{}, err
 		}
+		if err := verifyNativeSource(root, cfg); err != nil {
+			return sourceState{}, err
+		}
 		return sourceState{Kind: sourceNative, Version: cfg.RunethreadVersion, ContractVersion: cfg.ContractVersion}, nil
 	}
 	if legacyExists {
@@ -285,8 +288,8 @@ func checkNativeCompatibility(cfg repositoryConfig) error {
 		}
 		return fmt.Errorf("no native Runethread contract migration from version %d to %d is implemented", cfg.ContractVersion, buildinfo.ContractVersion)
 	}
-	if cfg.RunethreadVersion != buildinfo.ReleaseVersion {
-		return fmt.Errorf("repository pins Runethread %q; %s only upgrades the exact native %s state or trusted GitMemo v0.5.0", cfg.RunethreadVersion, buildinfo.ReleaseVersion, buildinfo.ReleaseVersion)
+	if cfg.RunethreadVersion != buildinfo.ReleaseVersion && cfg.RunethreadVersion != previousNativeReleaseVersion {
+		return fmt.Errorf("repository pins Runethread %q; %s only upgrades exact trusted %s or %s native state, or trusted GitMemo v0.5.0", cfg.RunethreadVersion, buildinfo.ReleaseVersion, previousNativeReleaseVersion, buildinfo.ReleaseVersion)
 	}
 	return nil
 }

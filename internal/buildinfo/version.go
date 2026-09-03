@@ -4,7 +4,7 @@ const (
 	ProductName              = "Runethread"
 	SourceRepository         = "runethread/core"
 	ManagedMetadataDir       = ".runethread"
-	ReleaseVersion           = "v0.6.0"
+	ReleaseVersion           = "v0.7.0"
 	RepositoryFormatVersion  = 2
 	SchemaVersion            = 1
 	ContractVersion          = 7
