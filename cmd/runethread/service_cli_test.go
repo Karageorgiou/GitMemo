@@ -129,7 +129,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 
 func TestMemoryServiceCLIRejectsUnknownJSONField(t *testing.T) {
 	root, _ := makeCLIServiceRepo(t)
-	requestPath := filepath.Join(root, "bad-request.json")
+	requestPath := filepath.Join(t.TempDir(), "bad-request.json")
 	if err := os.WriteFile(requestPath, []byte(`{"unknown":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -192,13 +192,13 @@ func cliDecisionProposal(id, title string) *memoryservice.ProposedDocument {
 	return &memoryservice.ProposedDocument{Memory: m, Markdown: markdown}
 }
 
-func writeCLIRequestFile(t *testing.T, root, name string, value any) string {
+func writeCLIRequestFile(t *testing.T, _ string, name string, value any) string {
 	t.Helper()
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, name)
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
 		t.Fatal(err)
 	}
