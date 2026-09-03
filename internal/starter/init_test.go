@@ -50,7 +50,7 @@ func TestInitCreatesSelfDescribingMemoryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	configText := string(config)
-	versionField := `"runethread_version": "` + buildinfo.ReleaseVersion + `"`
+	versionField := `"runethread_version": "` + buildinfo.ContractReleaseVersion + `"`
 	if !strings.Contains(configText, `"repository_format": `+strconv.Itoa(buildinfo.RepositoryFormatVersion)) || !strings.Contains(configText, `"schema_version": `+strconv.Itoa(buildinfo.SchemaVersion)) || !strings.Contains(configText, `"contract_version": `+strconv.Itoa(buildinfo.ContractVersion)) || !strings.Contains(configText, versionField) || strings.Contains(configText, legacyVersionField) {
 		t.Fatalf("unexpected config: %s", config)
 	}

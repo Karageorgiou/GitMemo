@@ -14,7 +14,7 @@ func TestExpectedLockCoversContractPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lock.RunethreadVersion != buildinfo.ReleaseVersion || lock.SourceRepository != buildinfo.SourceRepository || lock.ContractVersion != buildinfo.ContractVersion || lock.LockVersion != buildinfo.TrustLockVersion {
+	if lock.RunethreadVersion != buildinfo.ContractReleaseVersion || lock.SourceRepository != buildinfo.SourceRepository || lock.ContractVersion != buildinfo.ContractVersion || lock.LockVersion != buildinfo.TrustLockVersion {
 		t.Fatalf("unexpected lock metadata: %#v", lock)
 	}
 	if len(lock.FilesSHA256) != len(runethread.ContractPaths()) {

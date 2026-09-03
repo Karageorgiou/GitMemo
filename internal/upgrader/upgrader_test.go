@@ -31,7 +31,7 @@ func TestApplyMigratesExactGitMemoV050SourceAndPreservesCanonicalData(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.FromVersion != legacyReleaseVersion || result.ToVersion != buildinfo.ReleaseVersion || result.FromContract != legacyContractVersion || result.ToContract != buildinfo.ContractVersion {
+	if result.FromVersion != legacyReleaseVersion || result.ToVersion != buildinfo.ContractReleaseVersion || result.FromContract != legacyContractVersion || result.ToContract != buildinfo.ContractVersion {
 		t.Fatalf("unexpected migration result: %#v", result)
 	}
 	if result.AlreadyCurrent {
@@ -57,11 +57,11 @@ func TestApplyMigratesExactGitMemoV050SourceAndPreservesCanonicalData(t *testing
 		t.Fatalf("native lock missing: %v", err)
 	}
 	config := string(mustRead(t, filepath.Join(root, ".runethread", "config.json")))
-	if !strings.Contains(config, `"runethread_version": "`+buildinfo.ReleaseVersion+`"`) || strings.Contains(config, "gitmemo_version") {
+	if !strings.Contains(config, `"runethread_version": "`+buildinfo.ContractReleaseVersion+`"`) || strings.Contains(config, "gitmemo_version") {
 		t.Fatalf("unexpected native config: %s", config)
 	}
 	lock := string(mustRead(t, filepath.Join(root, ".runethread", "lock.json")))
-	if !strings.Contains(lock, `"source_repository": "runethread/core"`) || !strings.Contains(lock, `"runethread_version": "`+buildinfo.ReleaseVersion+`"`) || strings.Contains(lock, "gitmemo_version") {
+	if !strings.Contains(lock, `"source_repository": "runethread/core"`) || !strings.Contains(lock, `"runethread_version": "`+buildinfo.ContractReleaseVersion+`"`) || strings.Contains(lock, "gitmemo_version") {
 		t.Fatalf("unexpected native lock: %s", lock)
 	}
 	if _, err := os.Stat(filepath.Join(root, legacyExtendingPath)); !os.IsNotExist(err) {
@@ -168,7 +168,7 @@ func TestApplyRefusesNewerNativeContract(t *testing.T) {
 		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
 		SchemaVersion:     buildinfo.SchemaVersion,
 		ContractVersion:   buildinfo.ContractVersion + 1,
-		RunethreadVersion: buildinfo.ReleaseVersion,
+		RunethreadVersion: buildinfo.ContractReleaseVersion,
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -314,7 +314,7 @@ func TestApplyUpgradesExactNativeV060SourceWithoutChangingCanonicalData(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.FromVersion != previousNativeReleaseVersion || result.ToVersion != buildinfo.ReleaseVersion {
+	if result.FromVersion != previousNativeReleaseVersion || result.ToVersion != buildinfo.ContractReleaseVersion {
 		t.Fatalf("unexpected native migration result: %#v", result)
 	}
 	if result.FromContract != buildinfo.ContractVersion || result.ToContract != buildinfo.ContractVersion {
