@@ -70,7 +70,8 @@ jobs:
           }
           EOF
           gofmt -w internal/memoryservice/service.go internal/memoryservice/legal_operations_test.go
-          test "$(git diff --name-only | sort)" = $'internal/memoryservice/legal_operations_test.go\ninternal/memoryservice/service.go'
+          git add internal/memoryservice/service.go internal/memoryservice/legal_operations_test.go
+          test "$(git diff --cached --name-only | sort)" = $'internal/memoryservice/legal_operations_test.go\ninternal/memoryservice/service.go'
 
       - name: Verify MemoryService
         run: go test ./internal/memoryservice
