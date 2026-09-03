@@ -1,0 +1,443 @@
+name: Phase 2 release slice
+
+on:
+  push:
+    branches:
+      - runethread/phase-2-memory-service
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: runethread/phase-2-memory-service
+          fetch-depth: 0
+
+      - name: Build v0.7 release and compatibility slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          version = Path('internal/buildinfo/version.go')
+          text = version.read_text()
+          old = '\tReleaseVersion           = "v0.6.0"'
+          new = '\tReleaseVersion           = "v0.7.0"'
+          if text.count(old) != 1:
+              raise SystemExit('expected v0.6 ReleaseVersion exactly once')
+          version.write_text(text.replace(old, new, 1))
+
+          request = Path('.github/release-request.json')
+          text = request.read_text()
+          if text.count('"v0.6.0"') != 1:
+              raise SystemExit('expected v0.6 release request exactly once')
+          request.write_text(text.replace('"v0.6.0"', '"v0.7.0"', 1))
+
+          upgrader = Path('internal/upgrader/upgrader.go')
+          text = upgrader.read_text()
+          old = '''// Apply upgrades a supported memory repository to the Runethread contract
+          // embedded in the running binary. Native Runethread repositories are updated in
+          // place. The only legacy source accepted by v0.6.0 is the exact trusted GitMemo
+          // v0.5.0 format-1 state. User memories and project data are never rewritten by
+          // this operation.'''.replace('          ', '')
+          new = '''// Apply upgrades a supported memory repository to the Runethread contract
+          // embedded in the running binary. Native Runethread repositories are updated in
+          // place. Runethread v0.7.0 accepts the exact trusted v0.6.0 native state and the
+          // exact trusted GitMemo v0.5.0 format-1 predecessor state. User memories and
+          // project data are never rewritten by this operation.'''.replace('          ', '')
+          if text.count(old) != 1:
+              raise SystemExit('upgrader Apply comment pattern not found exactly once')
+          text = text.replace(old, new, 1)
+
+          old = '''\t\tif err := checkNativeCompatibility(cfg); err != nil {
+          \t\t\treturn sourceState{}, err
+          \t\t}
+          \t\treturn sourceState{Kind: sourceNative, Version: cfg.RunethreadVersion, ContractVersion: cfg.ContractVersion}, nil'''.replace('          \t', '\t')
+          new = '''\t\tif err := checkNativeCompatibility(cfg); err != nil {
+          \t\t\treturn sourceState{}, err
+          \t\t}
+          \t\tif err := verifyNativeSource(root, cfg); err != nil {
+          \t\t\treturn sourceState{}, err
+          \t\t}
+          \t\treturn sourceState{Kind: sourceNative, Version: cfg.RunethreadVersion, ContractVersion: cfg.ContractVersion}, nil'''.replace('          \t', '\t')
+          if text.count(old) != 1:
+              raise SystemExit('native source inspection pattern not found exactly once')
+          text = text.replace(old, new, 1)
+
+          old = '''\tif cfg.RunethreadVersion != buildinfo.ReleaseVersion {
+          \t\treturn fmt.Errorf("repository pins Runethread %q; %s only upgrades the exact native %s state or trusted GitMemo v0.5.0", cfg.RunethreadVersion, buildinfo.ReleaseVersion, buildinfo.ReleaseVersion)
+          \t}'''.replace('          \t', '\t')
+          new = '''\tif cfg.RunethreadVersion != buildinfo.ReleaseVersion && cfg.RunethreadVersion != previousNativeReleaseVersion {
+          \t\treturn fmt.Errorf("repository pins Runethread %q; %s only upgrades exact trusted %s or %s native state, or trusted GitMemo v0.5.0", cfg.RunethreadVersion, buildinfo.ReleaseVersion, previousNativeReleaseVersion, buildinfo.ReleaseVersion)
+          \t}'''.replace('          \t', '\t')
+          if text.count(old) != 1:
+              raise SystemExit('native version compatibility pattern not found exactly once')
+          upgrader.write_text(text.replace(old, new, 1))
+
+          readme = Path('README.md')
+          text = readme.read_text()
+          text = text.replace('Runethread v0.6.0 uses native managed metadata under:', 'Runethread uses native managed metadata under:', 1)
+          old = 'Runethread v0.6.0 also contains one deliberately narrow predecessor migration: an exact trusted GitMemo v0.5.0 repository (`repository_format` 1, schema 1, contract 6, lock 1) can be migrated to the native Runethread format. Unknown, mixed, or tampered legacy control state is refused rather than guessed. Historical GitMemo releases remain immutable history; the legacy name is not a second native Runethread interface.'
+          new = 'Runethread v0.7.0 upgrades an exact trusted v0.6.0 native repository by repinning only compatible managed release metadata and trust state; canonical memories/projects remain untouched and indexes are deterministically rebuilt. The deliberately narrow GitMemo predecessor bridge also remains available: an exact trusted GitMemo v0.5.0 repository (`repository_format` 1, schema 1, contract 6, lock 1) can migrate directly to the current native Runethread state. Unknown, mixed, or tampered control state is refused rather than guessed.'
+          if text.count(old) != 1:
+              raise SystemExit('README migration paragraph not found')
+          text = text.replace(old, new, 1)
+          old_cli = '''runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>
+          runethread index --check [root]'''.replace('          ', '')
+          new_cli = '''runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>
+          runethread get [--root DIR] [--json] <uuid>
+          runethread prepare [--root DIR] [--json] [--request FILE|-]
+          runethread apply [--root DIR] [--json] [--request FILE|-]
+          runethread withdraw [--root DIR] [--json] [--request FILE|-]
+          runethread status [--root DIR] [--json]
+          runethread index --check [root]'''.replace('          ', '')
+          if text.count(old_cli) != 1:
+              raise SystemExit('README CLI insertion point not found')
+          text = text.replace(old_cli, new_cli, 1)
+          marker = '`runethread search` uses deterministic Index v2. A full UUID is routed directly to its UUID shard; ordinary language uses the hash-sharded inverted term index. Search results are discovery metadata and point back to canonical atomic memory files.\n'
+          addition = marker + '\nThe Phase 2 MemoryService commands provide the deterministic automation boundary for retrieval and writes. `prepare` is read-only and returns an expected Git revision; `apply` and `withdraw` validate in an isolated worktree and publish only if that revision is still current. See [`docs/runethread/MEMORY_SERVICE.md`](docs/runethread/MEMORY_SERVICE.md).\n'
+          if text.count(marker) != 1:
+              raise SystemExit('README search paragraph marker not found')
+          readme.write_text(text.replace(marker, addition, 1))
+          PY
+
+          cat > internal/upgrader/native_previous.go <<'EOF'
+          package upgrader
+
+          import (
+              "bytes"
+              "encoding/json"
+              "fmt"
+              "path/filepath"
+
+              "github.com/runethread/core/internal/buildinfo"
+              "github.com/runethread/core/internal/trust"
+          )
+
+          const (
+              previousNativeReleaseVersion = "v0.6.0"
+              previousNativeContractSHA256 = "5b245c55e640555c797c3f86f02b54a431da40e959bdd466f90c0c5c88c45766"
+          )
+
+          func verifyNativeSource(root string, cfg repositoryConfig) error {
+              switch cfg.RunethreadVersion {
+              case buildinfo.ReleaseVersion:
+                  if problems := trust.Check(root); len(problems) != 0 {
+                      return fmt.Errorf("current native Runethread trust check failed at %s: %s", problems[0].Path, problems[0].Message)
+                  }
+                  return nil
+              case previousNativeReleaseVersion:
+                  return verifyPreviousNativeSource(root)
+              default:
+                  return fmt.Errorf("unsupported native Runethread source release %q", cfg.RunethreadVersion)
+              }
+          }
+
+          func verifyPreviousNativeSource(root string) error {
+              expected, err := trust.ExpectedLock()
+              if err != nil {
+                  return fmt.Errorf("build current trust anchor: %w", err)
+              }
+              if expected.ContractSHA256 != previousNativeContractSHA256 {
+                  return fmt.Errorf("embedded %s contract digest %s differs from the trusted %s compatible digest %s; explicit contract migration is required", buildinfo.ReleaseVersion, expected.ContractSHA256, previousNativeReleaseVersion, previousNativeContractSHA256)
+              }
+              expected.RunethreadVersion = previousNativeReleaseVersion
+
+              lockPath := filepath.Join(root, buildinfo.ManagedMetadataDir, "lock.json")
+              data, err := readRegularFile(lockPath)
+              if err != nil {
+                  return fmt.Errorf("read previous native trust lock: %w", err)
+              }
+              var actual trust.Lock
+              dec := json.NewDecoder(bytes.NewReader(data))
+              dec.DisallowUnknownFields()
+              if err := dec.Decode(&actual); err != nil {
+                  return fmt.Errorf("parse previous native trust lock: %w", err)
+              }
+              if actual.LockVersion != expected.LockVersion ||
+                  actual.SourceRepository != expected.SourceRepository ||
+                  actual.RunethreadVersion != expected.RunethreadVersion ||
+                  actual.RepositoryFormat != expected.RepositoryFormat ||
+                  actual.SchemaVersion != expected.SchemaVersion ||
+                  actual.ContractVersion != expected.ContractVersion ||
+                  actual.ContractSHA256 != expected.ContractSHA256 {
+                  return fmt.Errorf("native trust lock is not the exact supported %s source anchor", previousNativeReleaseVersion)
+              }
+              if len(actual.FilesSHA256) != len(expected.FilesSHA256) {
+                  return fmt.Errorf("native trust lock contains %d control-plane paths, expected %d for %s", len(actual.FilesSHA256), len(expected.FilesSHA256), previousNativeReleaseVersion)
+              }
+              for _, rel := range sortedStringMapKeys(expected.FilesSHA256) {
+                  expectedHash := expected.FilesSHA256[rel]
+                  if actual.FilesSHA256[rel] != expectedHash {
+                      return fmt.Errorf("native trust lock digest for %s does not match trusted %s", rel, previousNativeReleaseVersion)
+                  }
+                  local, err := readRegularFile(filepath.Join(root, filepath.FromSlash(rel)))
+                  if err != nil {
+                      return fmt.Errorf("verify previous native control-plane file %s: %w", rel, err)
+                  }
+                  if got := sha256Hex(local); got != expectedHash {
+                      return fmt.Errorf("native control-plane file %s has digest %s, expected %s from trusted %s", rel, got, expectedHash, previousNativeReleaseVersion)
+                  }
+              }
+              for rel := range actual.FilesSHA256 {
+                  if _, ok := expected.FilesSHA256[rel]; !ok {
+                      return fmt.Errorf("native trust lock contains unexpected control-plane path %s", rel)
+                  }
+              }
+              return nil
+          }
+          EOF
+
+          cat >> internal/upgrader/upgrader_test.go <<'EOF'
+
+          func TestApplyUpgradesExactNativeV060SourceWithoutChangingCanonicalData(t *testing.T) {
+              root := previousNativeFixture(t)
+              memoryJSON, memoryMD := writeFixtureMemory(t, root, false)
+              if err := indexer.Write(root); err != nil {
+                  t.Fatal(err)
+              }
+              beforeJSON := mustRead(t, memoryJSON)
+              beforeMD := mustRead(t, memoryMD)
+              beforeCatalog := mustRead(t, filepath.Join(root, "index", "catalog.json"))
+
+              result, err := Apply(root)
+              if err != nil {
+                  t.Fatal(err)
+              }
+              if result.FromVersion != previousNativeReleaseVersion || result.ToVersion != buildinfo.ReleaseVersion {
+                  t.Fatalf("unexpected native migration result: %#v", result)
+              }
+              if result.FromContract != buildinfo.ContractVersion || result.ToContract != buildinfo.ContractVersion {
+                  t.Fatalf("native migration unexpectedly changed contract version: %#v", result)
+              }
+              if got := strings.Join(result.ChangedPaths, ","); got != ".runethread/config.json,.runethread/lock.json" {
+                  t.Fatalf("native v0.6 -> v0.7 changed paths = %s", got)
+              }
+              if got := mustRead(t, memoryJSON); !bytes.Equal(got, beforeJSON) {
+                  t.Fatal("canonical memory JSON changed during native release repin")
+              }
+              if got := mustRead(t, memoryMD); !bytes.Equal(got, beforeMD) {
+                  t.Fatal("canonical memory Markdown changed during native release repin")
+              }
+              if got := mustRead(t, filepath.Join(root, "index", "catalog.json")); !bytes.Equal(got, beforeCatalog) {
+                  t.Fatal("memory-derived catalog changed during metadata-only native repin")
+              }
+              if problems := trust.Check(root); len(problems) != 0 {
+                  t.Fatalf("target trust check failed: %+v", problems)
+              }
+              if stale, err := indexer.Check(root); err != nil || len(stale) != 0 {
+                  t.Fatalf("target index is not fresh: stale=%v err=%v", stale, err)
+              }
+          }
+
+          func TestApplyRefusesTamperedNativeV060SourceBeforeWriting(t *testing.T) {
+              root := previousNativeFixture(t)
+              path := filepath.Join(root, "docs", "TRUST_MODEL.md")
+              mustWrite(t, path, append(mustRead(t, path), []byte("\ntampered\n")...))
+              configBefore := mustRead(t, filepath.Join(root, ".runethread", "config.json"))
+              lockBefore := mustRead(t, filepath.Join(root, ".runethread", "lock.json"))
+
+              if _, err := Apply(root); err == nil || !strings.Contains(err.Error(), "digest") {
+                  t.Fatalf("expected trusted native-source digest refusal, got %v", err)
+              }
+              if got := mustRead(t, filepath.Join(root, ".runethread", "config.json")); !bytes.Equal(got, configBefore) {
+                  t.Fatal("native config changed despite preflight refusal")
+              }
+              if got := mustRead(t, filepath.Join(root, ".runethread", "lock.json")); !bytes.Equal(got, lockBefore) {
+                  t.Fatal("native lock changed despite preflight refusal")
+              }
+          }
+
+          func previousNativeFixture(t *testing.T) string {
+              t.Helper()
+              root := filepath.Join(t.TempDir(), "memory")
+              if err := starter.Init(root); err != nil {
+                  t.Fatal(err)
+              }
+              cfg := repositoryConfig{
+                  RepositoryFormat:  buildinfo.RepositoryFormatVersion,
+                  SchemaVersion:     buildinfo.SchemaVersion,
+                  ContractVersion:   buildinfo.ContractVersion,
+                  RunethreadVersion: previousNativeReleaseVersion,
+              }
+              configData, err := json.MarshalIndent(cfg, "", "  ")
+              if err != nil {
+                  t.Fatal(err)
+              }
+              mustWrite(t, filepath.Join(root, ".runethread", "config.json"), append(configData, '\n'))
+
+              lock, err := trust.ExpectedLock()
+              if err != nil {
+                  t.Fatal(err)
+              }
+              if lock.ContractSHA256 != previousNativeContractSHA256 {
+                  t.Fatalf("current embedded contract digest %s does not match pinned v0.6 digest %s", lock.ContractSHA256, previousNativeContractSHA256)
+              }
+              lock.RunethreadVersion = previousNativeReleaseVersion
+              lockData, err := json.MarshalIndent(lock, "", "  ")
+              if err != nil {
+                  t.Fatal(err)
+              }
+              mustWrite(t, filepath.Join(root, ".runethread", "lock.json"), append(lockData, '\n'))
+              return root
+          }
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('internal/upgrader/upgrader_test.go')
+          text = path.read_text()
+          text = text.replace('import (\n', 'import (\n\t"bytes"\n', 1)
+          path.write_text(text)
+          PY
+
+          cat > docs/runethread/MEMORY_SERVICE.md <<'EOF'
+          # MemoryService
+
+          Status: **Implemented in Runethread v0.7.0**
+
+          MemoryService is the deterministic application boundary over a Runethread memory repository. It exists so AI clients and adapters can retrieve and mutate memory without editing canonical Markdown, JSON, generated indexes, or Git state directly.
+
+          ## Operations
+
+          ```text
+          Search
+          Get
+          PrepareMutation
+          ApplyMutation
+          Withdraw
+          Status
+          ```
+
+          `PrepareMutation` is read-only. It retrieves candidate memories, reports legal operation classes, and returns the exact Git revision that the semantic decision was prepared against.
+
+          `ApplyMutation` accepts a structured operation, a stable idempotency key, that expected revision, an RFC3339 mutation time, and where required a proposed memory plus Markdown. Core derives canonical paths and owns the storage transaction.
+
+          Supported operation classes are `create`, `update`, `correct`, `supersede`, `resolve`, `withdraw`, and `noop`.
+
+          ## Write transaction
+
+          A non-noop apply follows this deterministic sequence:
+
+          ```text
+          idempotency lookup
+             |
+             +-- exact committed retry -> already_applied
+             +-- same key / different request -> idempotency_conflict
+             |
+          verify clean canonical checkout + expected Git revision
+             |
+          detached temporary Git worktree at expected revision
+             |
+          apply semantic transition
+             |
+          rebuild Index v2
+             |
+          hard repository validation
+             |
+          create mutation commit with Runethread operation metadata
+             |
+          fast-forward publish only if canonical branch is still expected revision
+          ```
+
+          Validation failure discards the isolated transaction and cannot publish a canonical commit. In-process writes through one MemoryService instance are serialized. Git revision compare-and-swap remains the correctness boundary against other processes or writers.
+
+          ## Idempotency and lost responses
+
+          Every real mutation carries `idempotency_key`. The request is fingerprinted deterministically and the key/fingerprint are stored in Git commit metadata.
+
+          If a commit succeeds but the caller loses the response, retrying the exact same request/key returns `already_applied` with the original commit. This lookup happens before ordinary stale-revision rejection because the successful first attempt necessarily advanced HEAD.
+
+          Reusing a committed key with a different request returns `idempotency_conflict`.
+
+          ## CLI JSON boundary
+
+          The CLI service commands always emit JSON; `--json` is accepted explicitly for automation/readability.
+
+          ```text
+          runethread get --root DIR --json <uuid>
+          runethread prepare --root DIR --json --request request.json
+          runethread apply --root DIR --json --request request.json
+          runethread withdraw --root DIR --json --request request.json
+          runethread status --root DIR --json
+          ```
+
+          For `prepare`, `apply`, and `withdraw`, `--request -` reads one JSON value from stdin. Unknown JSON fields and trailing JSON values are rejected.
+
+          Successful results are written to stdout. Structured errors are written to stderr:
+
+          ```json
+          {
+            "error": {
+              "code": "stale_revision",
+              "operation": "apply",
+              "message": "repository revision is ..."
+            }
+          }
+          ```
+
+          Malformed command/request input exits with code 2. MemoryService/repository failures exit with code 1.
+
+          ## Apply request shape
+
+          ```json
+          {
+            "expected_revision": "<git-commit-sha>",
+            "idempotency_key": "stable-operation-id",
+            "operation": "create",
+            "mutation_time": "2026-09-03T12:00:00Z",
+            "proposed": {
+              "memory": { "...": "schema-valid memory sidecar fields" },
+              "markdown": "# Canonical memory content\n..."
+            }
+          }
+          ```
+
+          Operations that modify an existing memory also use `target_id`. `withdraw` has a narrower request containing `expected_revision`, `idempotency_key`, `target_id`, and `mutation_time`.
+
+          The semantic caller chooses the intended operation and proposed content. Deterministic Core enforces lifecycle/relationship rules, canonical placement, indexing, validation, idempotency, and Git publication.
+
+          ## Release compatibility
+
+          v0.7.0 does not change repository format, memory schema, operational contract, Index v2, or trust-lock format. Those remain 2 / 1 / 7 / 2 / 2 respectively.
+
+          Because repositories intentionally pin the exact trusted Runethread release, the v0.7.0 CLI includes an explicit rollback-safe upgrade from the exact trusted v0.6.0 native state. That migration repins managed config/trust metadata, rebuilds indexes, validates, and never rewrites canonical memories or project data.
+          EOF
+
+          gofmt -w internal/buildinfo/version.go internal/upgrader/upgrader.go internal/upgrader/native_previous.go internal/upgrader/upgrader_test.go
+
+          git add internal/buildinfo/version.go internal/upgrader/upgrader.go internal/upgrader/native_previous.go internal/upgrader/upgrader_test.go README.md docs/runethread/MEMORY_SERVICE.md .github/release-request.json
+
+      - name: Verify v0.7 source and migration gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go run ./cmd/runethread version)" = "v0.7.0"
+          test "$(jq -r '.version' .github/release-request.json)" = "v0.7.0"
+          grep -q 'BootstrapVerifierVersion = "v0.6.0"' internal/buildinfo/version.go
+          go test ./...
+          go vet ./...
+          go build ./cmd/runethread
+
+          root="$RUNNER_TEMP/v07-smoke"
+          rm -rf "$root"
+          go run ./cmd/runethread init "$root"
+          test "$(jq -r '.runethread_version' "$root/.runethread/config.json")" = "v0.7.0"
+          test "$(jq -r '.runethread_version' "$root/.runethread/lock.json")" = "v0.7.0"
+          go run ./cmd/runethread index --check "$root"
+          go run ./cmd/runethread validate "$root"
+
+      - name: Commit verified v0.7 slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: prepare Runethread v0.7.0 MemoryService release'
+          git push origin HEAD:runethread/phase-2-memory-service
