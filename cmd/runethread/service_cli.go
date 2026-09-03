@@ -32,6 +32,7 @@ type serviceCLIErrorBody struct {
 func runGet(args []string) int {
 	fs := serviceFlagSet("get")
 	root := fs.String("root", ".", "Runethread repository root")
+	_ = fs.Bool("json", false, "emit machine-readable JSON (service commands are always JSON)")
 	if err := fs.Parse(args); err != nil {
 		return writeCLIArgumentError("get", err)
 	}
@@ -52,6 +53,7 @@ func runGet(args []string) int {
 func runPrepare(args []string) int {
 	fs := serviceFlagSet("prepare")
 	root := fs.String("root", ".", "Runethread repository root")
+	_ = fs.Bool("json", false, "emit machine-readable JSON (service commands are always JSON)")
 	requestPath := fs.String("request", "-", "JSON request file, or - for stdin")
 	if err := fs.Parse(args); err != nil {
 		return writeCLIArgumentError("prepare", err)
@@ -77,6 +79,7 @@ func runPrepare(args []string) int {
 func runApply(args []string) int {
 	fs := serviceFlagSet("apply")
 	root := fs.String("root", ".", "Runethread repository root")
+	_ = fs.Bool("json", false, "emit machine-readable JSON (service commands are always JSON)")
 	requestPath := fs.String("request", "-", "JSON request file, or - for stdin")
 	if err := fs.Parse(args); err != nil {
 		return writeCLIArgumentError("apply", err)
@@ -102,6 +105,7 @@ func runApply(args []string) int {
 func runWithdraw(args []string) int {
 	fs := serviceFlagSet("withdraw")
 	root := fs.String("root", ".", "Runethread repository root")
+	_ = fs.Bool("json", false, "emit machine-readable JSON (service commands are always JSON)")
 	requestPath := fs.String("request", "-", "JSON request file, or - for stdin")
 	if err := fs.Parse(args); err != nil {
 		return writeCLIArgumentError("withdraw", err)
@@ -127,6 +131,7 @@ func runWithdraw(args []string) int {
 func runStatus(args []string) int {
 	fs := serviceFlagSet("status")
 	root := fs.String("root", ".", "Runethread repository root")
+	_ = fs.Bool("json", false, "emit machine-readable JSON (service commands are always JSON)")
 	if err := fs.Parse(args); err != nil {
 		return writeCLIArgumentError("status", err)
 	}

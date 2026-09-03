@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/runethread/core/internal/buildinfo"
 	"github.com/runethread/core/internal/indexer"
@@ -49,8 +50,9 @@ func errorf(code, operation string, cause error, format string, args ...any) err
 }
 
 type Service struct {
-	root string
-	repo repository.Reader
+	root    string
+	repo    repository.Reader
+	writeMu sync.Mutex
 }
 
 func Open(root string) (*Service, error) {

@@ -423,3 +423,67 @@ func TestCanonicalPathsUseGeneralForUnscopedMemory(t *testing.T) {
 		t.Fatalf("paths = %q, %q; want %q, %q", markdown, sidecar, wantMarkdown, wantSidecar)
 	}
 }
+
+func TestConcurrentAppliesFromSameRevisionSerializeAndRejectStaleWriter(t *testing.T) {
+	svc, root, revision := makeGitServiceFixture(t)
+	requests := []ApplyMutationRequest{
+		{
+			ExpectedRevision: revision,
+			IdempotencyKey:   "concurrent-a",
+			Operation:        "create",
+			MutationTime:     "2026-09-03T04:00:00Z",
+			Proposed:         decisionProposal(secondMemoryID, "Concurrent decision A", nil),
+		},
+		{
+			ExpectedRevision: revision,
+			IdempotencyKey:   "concurrent-b",
+			Operation:        "create",
+			MutationTime:     "2026-09-03T04:00:01Z",
+			Proposed:         decisionProposal(thirdMemoryID, "Concurrent decision B", nil),
+		},
+	}
+	type outcome struct {
+		result ApplyMutationResult
+		err    error
+	}
+	start := make(chan struct{})
+	outcomes := make(chan outcome, len(requests))
+	for _, request := range requests {
+		request := request
+		go func() {
+			<-start
+			result, err := svc.ApplyMutation(context.Background(), request)
+			outcomes <- outcome{result: result, err: err}
+		}()
+	}
+	close(start)
+
+	applied := 0
+	stale := 0
+	for range requests {
+		outcome := <-outcomes
+		if outcome.err == nil {
+			if outcome.result.Status != "applied" {
+				t.Fatalf("successful concurrent result = %+v", outcome.result)
+			}
+			applied++
+			continue
+		}
+		var serviceErr *Error
+		if !errors.As(outcome.err, &serviceErr) || serviceErr.Code != CodeStaleRevision {
+			t.Fatalf("concurrent loser error = %v, want stale_revision", outcome.err)
+		}
+		stale++
+	}
+	if applied != 1 || stale != 1 {
+		t.Fatalf("concurrent outcomes: applied=%d stale=%d", applied, stale)
+	}
+	records, err := memory.LoadAll(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("memory count after concurrent apply = %d, want 2", len(records))
+	}
+	assertRepositoryHealthy(t, root)
+}

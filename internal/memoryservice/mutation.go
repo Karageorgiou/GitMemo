@@ -73,6 +73,9 @@ type mutationPlan struct {
 }
 
 func (s *Service) ApplyMutation(ctx context.Context, request ApplyMutationRequest) (ApplyMutationResult, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	writer, ok := s.repo.(repository.Writer)
 	if !ok {
 		return ApplyMutationResult{}, errorf(CodeRepository, "apply", nil, "repository does not provide mutation capability")

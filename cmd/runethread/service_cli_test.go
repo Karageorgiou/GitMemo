@@ -19,7 +19,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 	root, initialRevision := makeCLIServiceRepo(t)
 
 	preparePath := writeCLIRequestFile(t, root, "prepare.json", memoryservice.PrepareMutationRequest{})
-	code, stdout, stderr := runCLIWithCapturedServiceIO(t, []string{"prepare", "--root", root, "--request", preparePath})
+	code, stdout, stderr := runCLIWithCapturedServiceIO(t, []string{"prepare", "--json", "--root", root, "--request", preparePath})
 	if code != 0 {
 		t.Fatalf("prepare exit=%d stderr=%s", code, stderr)
 	}
@@ -32,7 +32,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		t.Fatalf("prepare legal operations=%v", prepared.LegalOperations)
 	}
 
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"status", "--root", root})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"status", "--json", "--root", root})
 	if code != 0 {
 		t.Fatalf("status exit=%d stderr=%s", code, stderr)
 	}
@@ -51,7 +51,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		Proposed:         cliDecisionProposal(id, "Choose deterministic memory writes"),
 	}
 	createPath := writeCLIRequestFile(t, root, "apply-create.json", createRequest)
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"apply", "--root", root, "--request", createPath})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"apply", "--json", "--root", root, "--request", createPath})
 	if code != 0 {
 		t.Fatalf("apply exit=%d stderr=%s", code, stderr)
 	}
@@ -61,7 +61,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		t.Fatalf("unexpected apply result=%+v", applied)
 	}
 
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"apply", "--root", root, "--request", createPath})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"apply", "--json", "--root", root, "--request", createPath})
 	if code != 0 {
 		t.Fatalf("idempotent retry exit=%d stderr=%s", code, stderr)
 	}
@@ -71,7 +71,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		t.Fatalf("unexpected retry result=%+v first=%+v", retry, applied)
 	}
 
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"get", "--root", root, id})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"get", "--json", "--root", root, id})
 	if code != 0 {
 		t.Fatalf("get exit=%d stderr=%s", code, stderr)
 	}
@@ -90,7 +90,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		Proposed:         cliDecisionProposal(staleID, "This stale write must fail"),
 	}
 	stalePath := writeCLIRequestFile(t, root, "apply-stale.json", staleRequest)
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"apply", "--root", root, "--request", stalePath})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"apply", "--json", "--root", root, "--request", stalePath})
 	if code != 1 || strings.TrimSpace(stdout) != "" {
 		t.Fatalf("stale apply exit=%d stdout=%q stderr=%s", code, stdout, stderr)
 	}
@@ -107,7 +107,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		MutationTime:     "2026-09-03T12:02:00Z",
 	}
 	withdrawPath := writeCLIRequestFile(t, root, "withdraw.json", withdrawRequest)
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"withdraw", "--root", root, "--request", withdrawPath})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"withdraw", "--json", "--root", root, "--request", withdrawPath})
 	if code != 0 {
 		t.Fatalf("withdraw exit=%d stderr=%s", code, stderr)
 	}
@@ -117,7 +117,7 @@ func TestMemoryServiceCLIEndToEnd(t *testing.T) {
 		t.Fatalf("unexpected withdraw result=%+v", withdrawn)
 	}
 
-	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"get", "--root", root, id})
+	code, stdout, stderr = runCLIWithCapturedServiceIO(t, []string{"get", "--json", "--root", root, id})
 	if code != 0 {
 		t.Fatalf("get after withdraw exit=%d stderr=%s", code, stderr)
 	}
@@ -133,7 +133,7 @@ func TestMemoryServiceCLIRejectsUnknownJSONField(t *testing.T) {
 	if err := os.WriteFile(requestPath, []byte(`{"unknown":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr := runCLIWithCapturedServiceIO(t, []string{"prepare", "--root", root, "--request", requestPath})
+	code, stdout, stderr := runCLIWithCapturedServiceIO(t, []string{"prepare", "--json", "--root", root, "--request", requestPath})
 	if code != 2 || strings.TrimSpace(stdout) != "" {
 		t.Fatalf("bad request exit=%d stdout=%q stderr=%s", code, stdout, stderr)
 	}

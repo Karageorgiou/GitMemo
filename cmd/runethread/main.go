@@ -286,5 +286,5 @@ func isInteractive(file *os.File) bool {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Runethread repository tooling\n\nUsage:\n  runethread init [dir]\n  runethread upgrade [root]\n  runethread validate [--json] [root]\n  runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  runethread get [--root DIR] <uuid>\n  runethread prepare [--root DIR] [--request FILE|-]\n  runethread apply [--root DIR] [--request FILE|-]\n  runethread withdraw [--root DIR] [--request FILE|-]\n  runethread status [--root DIR]\n  runethread index --check [root]\n  runethread index --write [root]\n  runethread index --mark-stale [root]\n  runethread trust version [root]\n  runethread version")
+	fmt.Fprintln(os.Stderr, "Runethread repository tooling\n\nUsage:\n  runethread init [dir]\n  runethread upgrade [root]\n  runethread validate [--json] [root]\n  runethread search [--root DIR] [--limit N] [--json] <query-or-uuid>\n  runethread get [--root DIR] [--json] <uuid>\n  runethread prepare [--root DIR] [--json] [--request FILE|-]\n  runethread apply [--root DIR] [--json] [--request FILE|-]\n  runethread withdraw [--root DIR] [--json] [--request FILE|-]\n  runethread status [--root DIR] [--json]\n  runethread index --check [root]\n  runethread index --write [root]\n  runethread index --mark-stale [root]\n  runethread trust version [root]\n  runethread version")
 }
