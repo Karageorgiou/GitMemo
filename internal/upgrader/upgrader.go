@@ -213,7 +213,7 @@ func Apply(root string) (Result, error) {
 	sort.Strings(changed)
 	return Result{
 		FromVersion:    state.Version,
-		ToVersion:      buildinfo.ReleaseVersion,
+		ToVersion:      buildinfo.ContractReleaseVersion,
 		FromContract:   state.ContractVersion,
 		ToContract:     buildinfo.ContractVersion,
 		ChangedPaths:   unique(changed),
@@ -273,23 +273,27 @@ func readNativeConfig(root string) (repositoryConfig, error) {
 }
 
 func checkNativeCompatibility(cfg repositoryConfig) error {
+	return checkNativeCompatibilityFor(cfg, buildinfo.ReleaseVersion, buildinfo.ContractReleaseVersion)
+}
+
+func checkNativeCompatibilityFor(cfg repositoryConfig, runtimeRelease, contractRelease string) error {
 	if cfg.RepositoryFormat != buildinfo.RepositoryFormatVersion {
-		return fmt.Errorf("repository format %d is not supported by %s (supports %d)", cfg.RepositoryFormat, buildinfo.ReleaseVersion, buildinfo.RepositoryFormatVersion)
+		return fmt.Errorf("repository format %d is not supported by %s (supports %d)", cfg.RepositoryFormat, runtimeRelease, buildinfo.RepositoryFormatVersion)
 	}
 	if cfg.SchemaVersion != buildinfo.SchemaVersion {
 		if cfg.SchemaVersion > buildinfo.SchemaVersion {
-			return fmt.Errorf("repository schema version %d is newer than %s supports (%d)", cfg.SchemaVersion, buildinfo.ReleaseVersion, buildinfo.SchemaVersion)
+			return fmt.Errorf("repository schema version %d is newer than %s supports (%d)", cfg.SchemaVersion, runtimeRelease, buildinfo.SchemaVersion)
 		}
 		return fmt.Errorf("no Runethread schema migration from version %d to %d is implemented", cfg.SchemaVersion, buildinfo.SchemaVersion)
 	}
 	if cfg.ContractVersion != buildinfo.ContractVersion {
 		if cfg.ContractVersion > buildinfo.ContractVersion {
-			return fmt.Errorf("repository contract version %d is newer than %s supports (%d)", cfg.ContractVersion, buildinfo.ReleaseVersion, buildinfo.ContractVersion)
+			return fmt.Errorf("repository contract version %d is newer than %s supports (%d)", cfg.ContractVersion, runtimeRelease, buildinfo.ContractVersion)
 		}
 		return fmt.Errorf("no native Runethread contract migration from version %d to %d is implemented", cfg.ContractVersion, buildinfo.ContractVersion)
 	}
-	if cfg.RunethreadVersion != buildinfo.ReleaseVersion && cfg.RunethreadVersion != previousNativeReleaseVersion {
-		return fmt.Errorf("repository pins Runethread %q; %s only upgrades exact trusted %s or %s native state, or trusted GitMemo v0.5.0", cfg.RunethreadVersion, buildinfo.ReleaseVersion, previousNativeReleaseVersion, buildinfo.ReleaseVersion)
+	if cfg.RunethreadVersion != contractRelease && cfg.RunethreadVersion != previousNativeReleaseVersion {
+		return fmt.Errorf("repository pins contract release %q; running %s supports exact trusted %s or %s native contract state, or trusted GitMemo v0.5.0", cfg.RunethreadVersion, runtimeRelease, previousNativeReleaseVersion, contractRelease)
 	}
 	return nil
 }

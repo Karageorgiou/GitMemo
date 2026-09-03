@@ -117,7 +117,7 @@ func ConfigJSON() ([]byte, error) {
 		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
 		SchemaVersion:     buildinfo.SchemaVersion,
 		ContractVersion:   buildinfo.ContractVersion,
-		RunethreadVersion: buildinfo.ReleaseVersion,
+		RunethreadVersion: buildinfo.ContractReleaseVersion,
 	}, "", "  ")
 	if err != nil {
 		return nil, err

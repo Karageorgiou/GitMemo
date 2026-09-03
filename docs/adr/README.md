@@ -11,7 +11,7 @@ The Phase 0 architecture documents describe the target system. The decisions bel
 - **Superseded** — replaced by a newer ADR that explains why.
 - **Rejected** — considered and intentionally not adopted.
 
-## Phase 0 decision catalog
+## Decision catalog
 
 | ADR | Decision | Status |
 | --- | --- | --- |
@@ -25,6 +25,7 @@ The Phase 0 architecture documents describe the target system. The decisions bel
 | [ADR-008](ADR-008-permissions-and-approvals.md) | Least-privilege permission and approval model | Accepted |
 | [ADR-009](ADR-009-controlled-runethread-cutover.md) | Controlled GitMemo-to-Runethread cutover | Accepted |
 | [ADR-010](ADR-010-organization-repository-topology.md) | Runethread organization and repository topology | Accepted |
+| [ADR-011](ADR-011-runtime-contract-release-separation.md) | Runtime releases and contract releases are separate version dimensions | Accepted |
 
 ## ADR format
 

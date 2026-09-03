@@ -17,7 +17,7 @@ const (
 
 func verifyNativeSource(root string, cfg repositoryConfig) error {
 	switch cfg.RunethreadVersion {
-	case buildinfo.ReleaseVersion:
+	case buildinfo.ContractReleaseVersion:
 		if problems := trust.Check(root); len(problems) != 0 {
 			return fmt.Errorf("current native Runethread trust check failed at %s: %s", problems[0].Path, problems[0].Message)
 		}
@@ -35,7 +35,7 @@ func verifyPreviousNativeSource(root string) error {
 		return fmt.Errorf("build current trust anchor: %w", err)
 	}
 	if expected.ContractSHA256 != previousNativeContractSHA256 {
-		return fmt.Errorf("embedded %s contract digest %s differs from the trusted %s compatible digest %s; explicit contract migration is required", buildinfo.ReleaseVersion, expected.ContractSHA256, previousNativeReleaseVersion, previousNativeContractSHA256)
+		return fmt.Errorf("embedded contract release %s digest %s differs from the trusted %s compatible digest %s; explicit contract migration is required", buildinfo.ContractReleaseVersion, expected.ContractSHA256, previousNativeReleaseVersion, previousNativeContractSHA256)
 	}
 	expected.RunethreadVersion = previousNativeReleaseVersion
 

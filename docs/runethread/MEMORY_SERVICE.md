@@ -107,4 +107,6 @@ The semantic caller chooses the intended operation and proposed content. Determi
 
 v0.7.0 does not change repository format, memory schema, operational contract, Index v2, or trust-lock format. Those remain 2 / 1 / 7 / 2 / 2 respectively.
 
-Because repositories intentionally pin the exact trusted Runethread release, the v0.7.0 CLI includes an explicit rollback-safe upgrade from the exact trusted v0.6.0 native state. That migration repins managed config/trust metadata, rebuilds indexes, validates, and never rewrites canonical memories or project data.
+A memory repository pins the immutable **contract release** that owns its embedded control plane, not necessarily the version of the executable currently operating on it. A newer Runethread runtime may operate on the existing pin without repository churn only when its `ContractReleaseVersion`, compatibility dimensions, aggregate contract digest, and per-file control-plane digests still match that pinned contract exactly. Executable-only releases therefore do not require a memory-repository repin.
+
+When the control plane itself changes, `ContractReleaseVersion` must advance and the repository moves through an explicit supported upgrade. The v0.7.0 contract release includes the rollback-safe upgrade from the exact trusted v0.6.0 native state; that migration repins managed config/trust metadata, rebuilds indexes, validates, and never rewrites canonical memories or project data.

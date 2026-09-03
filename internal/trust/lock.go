@@ -56,7 +56,7 @@ func ExpectedLock() (Lock, error) {
 	return Lock{
 		LockVersion:       buildinfo.TrustLockVersion,
 		SourceRepository:  buildinfo.SourceRepository,
-		RunethreadVersion: buildinfo.ReleaseVersion,
+		RunethreadVersion: buildinfo.ContractReleaseVersion,
 		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
 		SchemaVersion:     buildinfo.SchemaVersion,
 		ContractVersion:   buildinfo.ContractVersion,
@@ -78,7 +78,7 @@ func JSON() ([]byte, error) {
 }
 
 // ReadPinnedVersion is intentionally forward-tolerant. The stable validation
-// bootstrap only needs the lock envelope version and pinned Runethread release.
+// bootstrap only needs the lock envelope version and pinned control-plane release.
 // Future lock files may add fields without requiring the bootstrap itself to
 // change.
 func ReadPinnedVersion(root string) (string, error) {
@@ -135,7 +135,7 @@ func Check(root string) []Problem {
 		addLock(fmt.Sprintf("source_repository is %q, expected %q", actual.SourceRepository, expected.SourceRepository))
 	}
 	if actual.RunethreadVersion != expected.RunethreadVersion {
-		addLock(fmt.Sprintf("runethread_version is %q, but running validator is %q", actual.RunethreadVersion, expected.RunethreadVersion))
+		addLock(fmt.Sprintf("runethread_version is %q, expected pinned contract release %q (running release %q)", actual.RunethreadVersion, expected.RunethreadVersion, buildinfo.ReleaseVersion))
 	}
 	if actual.RepositoryFormat != expected.RepositoryFormat || actual.SchemaVersion != expected.SchemaVersion || actual.ContractVersion != expected.ContractVersion {
 		addLock(fmt.Sprintf("repository/schema/contract versions are %d/%d/%d, expected %d/%d/%d", actual.RepositoryFormat, actual.SchemaVersion, actual.ContractVersion, expected.RepositoryFormat, expected.SchemaVersion, expected.ContractVersion))
