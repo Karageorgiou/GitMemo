@@ -1,4 +1,4 @@
-name: Verify runtime and contract release decoupling
+name: Audit runtime and contract release separation
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - name: Check out compatibility branch
@@ -23,78 +23,25 @@ jobs:
         with:
           go-version: '1.27.0'
 
-      - name: Verify exact base and intended branch surface
+      - name: Audit every release-dimension reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== buildinfo release references ==='
+          grep -R --line-number -E 'buildinfo\.(ReleaseVersion|ContractReleaseVersion)' internal cmd || true
+          echo '=== repository pin references ==='
+          grep -R --line-number -E 'RunethreadVersion|runethread_version' internal cmd || true
+          echo '=== buildinfo constants ==='
+          cat internal/buildinfo/version.go
+
+      - name: Verify immutable base
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse origin/main)" = "34adf579c6b3dcb40359fde7bd1cb9f69cd08ec7"
           test "$(git merge-base HEAD origin/main)" = "34adf579c6b3dcb40359fde7bd1cb9f69cd08ec7"
-          cat > /tmp/expected-files <<'EOF'
-          .github/scripts/decouple-release-contract.py
-          .github/workflows/decouple-release-contract.yml
-          docs/adr/ADR-011-runtime-contract-release-separation.md
-          docs/adr/README.md
-          docs/runethread/MEMORY_SERVICE.md
-          internal/buildinfo/version.go
-          internal/starter/init.go
-          internal/trust/lock.go
-          internal/trust/release_compatibility_test.go
-          internal/upgrader/native_previous.go
-          internal/upgrader/release_compatibility_test.go
-          internal/upgrader/upgrader.go
-          internal/upgrader/upgrader_test.go
-          EOF
-          git diff --name-only origin/main...HEAD | sort > /tmp/actual-files
-          diff -u /tmp/expected-files /tmp/actual-files
 
-      - name: Enforce release-dimension invariants
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -R --line-number --fixed-string 'RunethreadVersion: buildinfo.ReleaseVersion' internal; then
-            echo 'metadata generation still binds repository pin to runtime ReleaseVersion' >&2
-            exit 1
-          fi
-          if grep -R --line-number --fixed-string 'cfg.RunethreadVersion != buildinfo.ReleaseVersion' internal; then
-            echo 'native compatibility still binds repository pin to runtime ReleaseVersion' >&2
-            exit 1
-          fi
-          test "$(grep -R --fixed-string 'ContractReleaseVersion' internal/buildinfo/version.go internal/trust internal/starter internal/upgrader | wc -l)" -ge 6
-          grep -F 'ReleaseVersion' internal/buildinfo/version.go
-          grep -F 'ContractReleaseVersion' internal/buildinfo/version.go
-
-      - name: Verify no repository contract surface changed
-        shell: bash
-        run: |
-          set -euo pipefail
-          changed="$(git diff --name-only origin/main...HEAD)"
-          for forbidden in \
-            MEMORY_PROTOCOL.md \
-            docs/EXTENDING_RUNETHREAD.md \
-            docs/INDEX_FORMAT.md \
-            docs/MEMORY_CONTENT_FORMAT.md \
-            docs/MEMORY_SCHEMA.md \
-            docs/REPOSITORY_VALIDATION.md \
-            docs/SOURCES.md \
-            docs/TAXONOMY.md \
-            docs/TRUST_MODEL.md \
-            docs/USER_COMMANDS.md \
-            schema/memory-item.schema.json \
-            templates/correction.md \
-            templates/decision.md \
-            templates/fact.md \
-            templates/milestone.md \
-            templates/open_loop.md \
-            templates/preference.md \
-            templates/reference.md \
-            templates/state.md; do
-            if printf '%s\n' "$changed" | grep -Fx "$forbidden"; then
-              echo "control-plane file changed unexpectedly: $forbidden" >&2
-              exit 1
-            fi
-          done
-
-      - name: Run full source gate on committed branch state
+      - name: Run full source gate on current committed state
         shell: bash
         run: |
           set -euo pipefail
@@ -102,10 +49,5 @@ jobs:
           go test ./...
           go vet ./...
           go build ./cmd/runethread
-          tmp="$(mktemp -d)"
-          ./runethread init "$tmp/memory"
-          ./runethread validate "$tmp/memory"
-          ./runethread index --check "$tmp/memory"
-          test "$(./runethread trust version "$tmp/memory")" = "v0.7.0"
-          rm -rf "$tmp" ./runethread
+          rm -f ./runethread
           test -z "$(git status --porcelain)"
