@@ -196,25 +196,26 @@ func (s *Service) PrepareMutation(ctx context.Context, request PrepareMutationRe
 }
 
 type StatusResponse struct {
-	Root               string             `json:"root"`
-	Revision           string             `json:"revision"`
-	Branch             string             `json:"branch,omitempty"`
-	Clean              bool               `json:"clean"`
-	DirtyEntries       []string           `json:"dirty_entries,omitempty"`
-	TrustOK            bool               `json:"trust_ok"`
-	TrustProblems      int                `json:"trust_problems"`
-	ValidationErrors   int                `json:"validation_errors"`
-	ValidationWarnings int                `json:"validation_warnings"`
-	ValidationIssues   []validation.Issue `json:"validation_issues,omitempty"`
-	IndexCurrent       bool               `json:"index_current"`
-	StaleIndexPaths    []string           `json:"stale_index_paths,omitempty"`
-	IndexError         string             `json:"index_error,omitempty"`
-	ReleaseVersion     string             `json:"release_version"`
-	RepositoryFormat   int                `json:"repository_format"`
-	SchemaVersion      int                `json:"schema_version"`
-	ContractVersion    int                `json:"contract_version"`
-	IndexFormatVersion int                `json:"index_format_version"`
-	TrustLockVersion   int                `json:"trust_lock_version"`
+	Root                   string             `json:"root"`
+	Revision               string             `json:"revision"`
+	Branch                 string             `json:"branch,omitempty"`
+	Clean                  bool               `json:"clean"`
+	DirtyEntries           []string           `json:"dirty_entries,omitempty"`
+	TrustOK                bool               `json:"trust_ok"`
+	TrustProblems          int                `json:"trust_problems"`
+	ValidationErrors       int                `json:"validation_errors"`
+	ValidationWarnings     int                `json:"validation_warnings"`
+	ValidationIssues       []validation.Issue `json:"validation_issues,omitempty"`
+	IndexCurrent           bool               `json:"index_current"`
+	StaleIndexPaths        []string           `json:"stale_index_paths,omitempty"`
+	IndexError             string             `json:"index_error,omitempty"`
+	ReleaseVersion         string             `json:"release_version"`
+	ContractReleaseVersion string             `json:"contract_release_version"`
+	RepositoryFormat       int                `json:"repository_format"`
+	SchemaVersion          int                `json:"schema_version"`
+	ContractVersion        int                `json:"contract_version"`
+	IndexFormatVersion     int                `json:"index_format_version"`
+	TrustLockVersion       int                `json:"trust_lock_version"`
 }
 
 func (s *Service) Status(ctx context.Context) (StatusResponse, error) {
@@ -231,25 +232,26 @@ func (s *Service) Status(ctx context.Context) (StatusResponse, error) {
 		indexError = indexErr.Error()
 	}
 	return StatusResponse{
-		Root:               s.root,
-		Revision:           state.Revision,
-		Branch:             state.Branch,
-		Clean:              state.Clean,
-		DirtyEntries:       state.DirtyEntries,
-		TrustOK:            len(trustProblems) == 0,
-		TrustProblems:      len(trustProblems),
-		ValidationErrors:   errorsCount,
-		ValidationWarnings: warningsCount,
-		ValidationIssues:   issues,
-		IndexCurrent:       indexErr == nil && len(stale) == 0,
-		StaleIndexPaths:    stale,
-		IndexError:         indexError,
-		ReleaseVersion:     buildinfo.ReleaseVersion,
-		RepositoryFormat:   buildinfo.RepositoryFormatVersion,
-		SchemaVersion:      buildinfo.SchemaVersion,
-		ContractVersion:    buildinfo.ContractVersion,
-		IndexFormatVersion: buildinfo.IndexFormatVersion,
-		TrustLockVersion:   buildinfo.TrustLockVersion,
+		Root:                   s.root,
+		Revision:               state.Revision,
+		Branch:                 state.Branch,
+		Clean:                  state.Clean,
+		DirtyEntries:           state.DirtyEntries,
+		TrustOK:                len(trustProblems) == 0,
+		TrustProblems:          len(trustProblems),
+		ValidationErrors:       errorsCount,
+		ValidationWarnings:     warningsCount,
+		ValidationIssues:       issues,
+		IndexCurrent:           indexErr == nil && len(stale) == 0,
+		StaleIndexPaths:        stale,
+		IndexError:             indexError,
+		ReleaseVersion:         buildinfo.ReleaseVersion,
+		ContractReleaseVersion: buildinfo.ContractReleaseVersion,
+		RepositoryFormat:       buildinfo.RepositoryFormatVersion,
+		SchemaVersion:          buildinfo.SchemaVersion,
+		ContractVersion:        buildinfo.ContractVersion,
+		IndexFormatVersion:     buildinfo.IndexFormatVersion,
+		TrustLockVersion:       buildinfo.TrustLockVersion,
 	}, nil
 }
 
