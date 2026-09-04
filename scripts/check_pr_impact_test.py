@@ -189,7 +189,8 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
         result = self.run_guard(base)
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("embedded contract changed", result.stderr)
+        self.assertIn("embedded contract change detected", result.stdout)
+        self.assertIn("ContractVersion did not advance", result.stderr)
 
 
 if __name__ == "__main__":
