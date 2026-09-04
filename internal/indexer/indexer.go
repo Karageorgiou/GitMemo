@@ -56,6 +56,11 @@ type Result struct {
 }
 
 func Generate(root string) (Result, error) {
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireOptionalRegularTree(root, "projects"); err != nil {
+			return Result{}, fmt.Errorf("unsafe projects tree: %w", err)
+		}
+	}
 	records, err := memory.LoadAll(root)
 	if err != nil {
 		return Result{}, err
@@ -122,6 +127,11 @@ func ExistingPaths(root string) ([]string, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireOptionalRegularTree(root, "index"); err != nil {
+			return nil, err
+		}
+	}
 
 	var paths []string
 	err := filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
@@ -167,6 +177,13 @@ func MarkStale(root string) error {
 }
 
 func IsMarkedStale(root string) bool {
+	if buildinfo.ContractVersion >= 8 {
+		if _, err := ExistingPaths(root); err != nil {
+			return true
+		}
+		_, err := os.Lstat(filepath.Join(root, filepath.FromSlash(StaleMarkerPath)))
+		return err == nil
+	}
 	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(StaleMarkerPath)))
 	return err == nil
 }
@@ -357,6 +374,42 @@ func projectDisplayName(root, slug string) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+func requireOptionalRegularTree(root, rel string) error {
+	base := filepath.Join(root, filepath.FromSlash(rel))
+	info, err := os.Lstat(base)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a symbolic link", base)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", base)
+	}
+	return filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a symbolic link", path)
+		}
+		if d.IsDir() {
+			return nil
+		}
+		entryInfo, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !entryInfo.Mode().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", path)
+		}
+		return nil
+	})
 }
 
 func sortedKeys[T any](m map[string][]T) []string {
