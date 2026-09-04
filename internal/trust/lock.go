@@ -56,7 +56,7 @@ func ExpectedLock() (Lock, error) {
 	return Lock{
 		LockVersion:       buildinfo.TrustLockVersion,
 		SourceRepository:  buildinfo.SourceRepository,
-		RunethreadVersion: buildinfo.ReleaseVersion,
+		RunethreadVersion: buildinfo.ContractReleaseVersion,
 		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
 		SchemaVersion:     buildinfo.SchemaVersion,
 		ContractVersion:   buildinfo.ContractVersion,
