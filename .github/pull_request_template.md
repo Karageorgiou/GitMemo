@@ -6,6 +6,7 @@
 
 Check every class that applies.
 
+- [ ] Development infrastructure / CI / engineering policy
 - [ ] Documentation-only / non-normative
 - [ ] Runtime-only implementation
 - [ ] Public API / CLI
@@ -26,6 +27,16 @@ Check every class that applies.
 - Current published release: `...`
 - Relevant version dimensions: `...`
 - Relevant historical fixture/release: `...`
+- Required `validate`/ruleset surface verified: `...`
+
+## Scope-boundary decision
+
+- [ ] Every changed file belongs to the declared branch/PR purpose.
+- [ ] Any defect discovered by CI was classified by product semantics, not assumed to be CI-only.
+- [ ] No accepted/rejected repository state, trust rule, bootstrap/starter output, schema/contract behavior, migration behavior, or public API/CLI behavior changed without the corresponding change class/version/migration review.
+- [ ] If scope changed materially during implementation, exploratory evidence was preserved and the final work was recreated/rebased on a clean verified base rather than hidden with a force-push.
+
+Scope decision / evidence:
 
 ## Impact matrix
 
@@ -33,6 +44,7 @@ For each relevant surface, state **changed / unchanged** and why. Do not leave a
 
 | Surface | Impact / evidence |
 | --- | --- |
+| Development pipeline / required checks | |
 | Canonical memory bytes / UUIDs / provenance | |
 | `projects/` / unrelated user data | |
 | `.runethread` config / lock | |
@@ -67,7 +79,7 @@ Details:
 
 ## Failure modes
 
-<!-- Stale revisions, concurrency, idempotent retry, validation failure, tampering, rollback, unsupported newer state, release interruption, etc. -->
+<!-- Stale revisions, concurrency, idempotent retry, validation failure, tampering, rollback, unsupported newer state, platform-specific behavior, release interruption, etc. -->
 
 ## Contract/versioning gate
 
@@ -80,21 +92,42 @@ Contract/version decision:
 ## Dependency/toolchain gate
 
 - [ ] No dependency/toolchain change, **or** current authoritative support requirements, transitive dependencies, licenses/advisories, platform builds, and dependency-graph behavior were reviewed.
+- [ ] Dependency/Actions update automation remains deliberate and pinned where required.
 
 Details:
 
-## Verification on exact head
+## Mandatory pipeline on exact head
+
+Cheap/policy gates:
 
 - [ ] `go mod verify`
-- [ ] `go test ./...`
-- [ ] `go test -race ./...`
+- [ ] all tracked Go files pass `gofmt -l`
+- [ ] `git diff --check`
+- [ ] development-policy guard self-tests pass
+- [ ] development-policy guard passes
+- [ ] PR-impact guard self-tests pass
+- [ ] PR-specific impact/version guard passes
+
+Linux quality:
+
+- [ ] `go test -count=1 ./...`
+- [ ] `go test -race -count=1 ./...`
 - [ ] `go vet ./...`
 - [ ] CLI build
 - [ ] fresh `runethread init`
 - [ ] `runethread index --check`
 - [ ] `runethread validate`
-- [ ] change-specific tests
-- [ ] permanent `Validate Runethread` check passed on the exact reviewed head
+
+Cross-platform:
+
+- [ ] macOS module verify + tests + vet + build
+- [ ] Windows module verify + tests + vet + build
+- [ ] No platform was removed/skipped/weakened to obtain green CI
+
+Aggregate:
+
+- [ ] required final `validate` job passed on the exact reviewed head
+- [ ] change-specific tests passed
 
 Evidence / exact SHA:
 
@@ -103,13 +136,15 @@ Evidence / exact SHA:
 - [ ] Canonical GitHub PR patch/file list reviewed.
 - [ ] No temporary verifier/fixer workflow or script leaked into the final diff.
 - [ ] Validation CI is read-only; it does not commit/push source fixes.
+- [ ] Required Actions remain pinned to immutable full commit SHAs.
+- [ ] `.gitattributes`, Dependabot, CODEOWNERS, agent policy, and policy guards remain present.
 - [ ] Comments/reviews/review threads checked.
 - [ ] Base has not moved unexpectedly, or the PR was updated and revalidated.
 - [ ] No unexplained changed file remains.
 
 ## Release / downstream plan
 
-<!-- State explicitly whether this PR needs a release, template update, private-repository migration, or none. -->
+<!-- State explicitly whether this PR needs a release, template update, private-repository migration, or none. Development-pipeline work does not implicitly authorize managed memory-repository/bootstrap changes. -->
 
 ## Remaining concerns / uncertainty
 
