@@ -80,7 +80,7 @@ func (g *Git) BeginTransaction(ctx context.Context, revision string) (Transactio
 		return nil, fmt.Errorf("create transaction directory: %w", err)
 	}
 	root := filepath.Join(base, "worktree")
-	if err := g.run(ctx, "worktree", "add", "--detach", root, revision); err != nil {
+	if err := g.run(ctx, "-c", "core.autocrlf=false", "worktree", "add", "--detach", root, revision); err != nil {
 		_ = os.RemoveAll(base)
 		return nil, fmt.Errorf("create transaction worktree: %w", err)
 	}
@@ -163,7 +163,7 @@ func (g *Git) Publish(ctx context.Context, branch, expectedRevision, commit stri
 	if state.Revision != expectedRevision {
 		return &StaleRevisionError{Expected: expectedRevision, Current: state.Revision}
 	}
-	if err := g.run(ctx, "merge", "--ff-only", "--no-edit", commit); err != nil {
+	if err := g.run(ctx, "-c", "core.autocrlf=false", "merge", "--ff-only", "--no-edit", commit); err != nil {
 		latest, stateErr := g.State(ctx)
 		if stateErr == nil && latest.Revision != expectedRevision {
 			return &StaleRevisionError{Expected: expectedRevision, Current: latest.Revision}

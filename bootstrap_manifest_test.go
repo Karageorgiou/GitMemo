@@ -24,9 +24,9 @@ type bootstrapManifest struct {
 		RequiredPaths      []string `json:"required_paths"`
 	} `json:"discovery"`
 	Release struct {
-		Repository                    string `json:"repository"`
-		Strategy                      string `json:"strategy"`
-		TemplateIsReleasePinned       bool   `json:"template_is_release_pinned"`
+		Repository                   string `json:"repository"`
+		Strategy                     string `json:"strategy"`
+		TemplateIsReleasePinned      bool   `json:"template_is_release_pinned"`
 		ExistingRepositoriesExplicit bool   `json:"existing_repositories_upgrade_explicitly"`
 	} `json:"release"`
 	Commands struct {
@@ -36,8 +36,8 @@ type bootstrapManifest struct {
 	Security struct {
 		PersonalDataCanonical bool `json:"personal_data_allowed_in_canonical_repository"`
 		PersonalDataTemplate  bool `json:"personal_data_allowed_in_template_repository"`
-		PrivateBeforeWrites    bool `json:"memory_repository_must_be_private_before_personal_writes"`
-		RequestCredentials     bool `json:"request_credentials"`
+		PrivateBeforeWrites   bool `json:"memory_repository_must_be_private_before_personal_writes"`
+		RequestCredentials    bool `json:"request_credentials"`
 	} `json:"security"`
 }
 
