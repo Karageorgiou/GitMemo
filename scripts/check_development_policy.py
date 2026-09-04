@@ -85,8 +85,8 @@ PIPELINE_NEEDLES = (
     "gofmt -l",
     "git diff --check",
     "go test -race -count=1 ./...",
-    "macos-latest",
-    "windows-latest",
+    "macOS through the platform matrix",
+    "Windows through the platform matrix",
 )
 
 PR_NEEDLES = (
