@@ -106,6 +106,61 @@ func objectUnder(root, rel string, wantDirectory bool) (string, error) {
 	return current, nil
 }
 
+// RequireSafeWritePath validates a repository-relative target before a create
+// or replacement write. Every existing ancestor must be a real directory and
+// an existing final object must be a regular file. Missing components are
+// allowed because the caller may create them after this preflight.
+func RequireSafeWritePath(root, rel string) error {
+	if strings.TrimSpace(rel) == "" {
+		return fmt.Errorf("relative path must not be empty")
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve root: %w", err)
+	}
+	if err := RequireDirectory(rootAbs); err != nil {
+		return fmt.Errorf("unsafe root: %w", err)
+	}
+
+	local := filepath.FromSlash(rel)
+	if filepath.IsAbs(local) || filepath.VolumeName(local) != "" {
+		return fmt.Errorf("path %q must be repository-relative", rel)
+	}
+	clean := filepath.Clean(local)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path %q escapes repository root", rel)
+	}
+
+	parts := strings.Split(clean, string(filepath.Separator))
+	current := rootAbs
+	for i, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a symbolic link", current)
+		}
+		if i < len(parts)-1 {
+			if !info.IsDir() {
+				return fmt.Errorf("%s is not a directory", current)
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", current)
+		}
+	}
+	return nil
+}
+
 // RequireTree requires rel to resolve to a real directory beneath root and
 // requires every traversed entry beneath it to be either a real directory or a
 // regular file. Symbolic links and other special filesystem objects are
