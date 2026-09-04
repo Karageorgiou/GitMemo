@@ -15,6 +15,13 @@ import (
 	"github.com/runethread/core/internal/trust"
 )
 
+const memoryRepoGitAttributes = `# Runethread hashes and validates text bytes. Keep repository text canonical
+# across operating systems regardless of a developer's global core.autocrlf.
+* text=auto eol=lf
+
+*.exe binary
+`
+
 const memoryRepoReadmeTemplate = `# Runethread Memory
 
 Private, user-owned persistent memory for AI assistants.
@@ -108,6 +115,10 @@ func MemoryRepoReadme() []byte {
 	return []byte(memoryRepoReadmeTemplate)
 }
 
+func GitAttributes() []byte {
+	return []byte(memoryRepoGitAttributes)
+}
+
 func ValidationWorkflow() []byte {
 	return []byte(memoryValidationWorkflowTemplate)
 }
@@ -139,6 +150,11 @@ func Init(root string) error {
 		return fmt.Errorf("create target directory: %w", err)
 	}
 
+	if buildinfo.ContractVersion >= 8 {
+		if err := writeNew(root, ".gitattributes", GitAttributes()); err != nil {
+			return err
+		}
+	}
 	for _, rel := range runethread.ContractPaths() {
 		data, err := fs.ReadFile(runethread.ContractFS, rel)
 		if err != nil {
@@ -183,12 +199,21 @@ func Init(root string) error {
 }
 
 func preflight(root string) error {
-	info, err := os.Stat(root)
+	var info os.FileInfo
+	var err error
+	if buildinfo.ContractVersion >= 8 {
+		info, err = os.Lstat(root)
+	} else {
+		info, err = os.Stat(root)
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return fmt.Errorf("inspect target: %w", err)
+	}
+	if buildinfo.ContractVersion >= 8 && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("target %q is a symbolic link", root)
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("target %q is not a directory", root)
