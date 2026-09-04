@@ -11,10 +11,9 @@ import (
 )
 
 const (
-	nativeV060ReleaseVersion     = "v0.6.0"
-	nativeV070ReleaseVersion     = "v0.7.0"
-	previousNativeReleaseVersion = nativeV060ReleaseVersion // compatibility gate retained until the contract-v8 transition
-	nativeContractV7SHA256       = "5b245c55e640555c797c3f86f02b54a431da40e959bdd466f90c0c5c88c45766"
+	nativeV060ReleaseVersion = "v0.6.0"
+	nativeV070ReleaseVersion = "v0.7.0"
+	nativeContractV7SHA256   = "5b245c55e640555c797c3f86f02b54a431da40e959bdd466f90c0c5c88c45766"
 )
 
 type nativeSourceAnchor struct {
