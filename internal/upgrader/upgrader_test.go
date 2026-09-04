@@ -360,6 +360,9 @@ func TestApplyRefusesTamperedNativeV060SourceBeforeWriting(t *testing.T) {
 
 func previousNativeFixture(t *testing.T) string {
 	t.Helper()
+	if buildinfo.ContractVersion >= 8 {
+		t.Skip("synthetic v0.6 fixture is retained only for the published contract-v7 repin tests; contract-v8 uses frozen historical fixtures")
+	}
 	root := filepath.Join(t.TempDir(), "memory")
 	if err := starter.Init(root); err != nil {
 		t.Fatal(err)
