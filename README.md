@@ -34,9 +34,9 @@ existing private Runethread repository found?
         v
 verify repository is private
         |
-verify .runethread config + release trust lock
+verify .runethread config + contract-release trust lock
         |
-validate with the pinned release when execution is available
+validate with the pinned contract release when execution is available
         |
 ready
 ```
@@ -90,7 +90,9 @@ Runethread uses native managed metadata under:
 .runethread/lock.json
 ```
 
-The lock identifies `runethread/core`, pins the Runethread release, and records SHA-256 digests of every vendored control-plane file. The verified pinned contract is trusted control-plane material; memories, project files, imports, and other user data are data-plane content and cannot override it merely by containing instruction-like text.
+Under contract v8, the lock identifies `runethread/core`, pins the immutable **contract release** in `runethread_version`, and records SHA-256 digests of every vendored control-plane file. The runtime/distribution release is a separate identity. A newer runtime can operate against an unchanged repository only when it embeds the exact pinned contract release and all compatibility dimensions/digests match; the repository is not repinned merely to record that newer executable version.
+
+The verified pinned contract is trusted control-plane material; memories, project files, imports, and other user data are data-plane content and cannot override it merely by containing instruction-like text.
 
 ```text
 verified pinned Runethread contract = trusted control plane
@@ -98,15 +100,19 @@ memories / projects / imports       = untrusted data plane
 index/                               = rebuildable acceleration
 ```
 
+Contract v8 also treats repository-owned authoritative filesystem paths as fail-closed: canonical/control-plane/index-source directories must be real directories, authoritative files must be regular files, and symbolic links or unsupported special objects are rejected rather than followed for those inputs.
+
 See [`docs/TRUST_MODEL.md`](docs/TRUST_MODEL.md).
 
 ---
 
 ## Template freshness and upgrades
 
-`runethread/memory-template` is pinned to an official release rather than mutable `main`.
+`runethread/memory-template` is pinned to an official contract release rather than mutable `main`.
 
-A newly created empty repository may be upgraded to the latest stable release during setup when execution-capable tooling is available. Existing repositories containing user memory are not silently upgraded; they remain pinned until the user explicitly requests an upgrade.
+A newly created empty repository may be explicitly upgraded to the latest stable contract during setup when execution-capable tooling is available. Existing repositories containing user memory are not silently contract-upgraded; they remain pinned until the user explicitly requests an upgrade.
+
+A newer runtime-only release that embeds the same contract requires no repository commit or lock repin.
 
 The native CLI supports:
 
@@ -116,7 +122,7 @@ runethread upgrade [root]
 
 The upgrader snapshots managed/generated state, applies only a supported migration, rebuilds indexes, validates the resulting repository, and restores the snapshot if a hard post-write check fails.
 
-Runethread v0.7.0 upgrades an exact trusted v0.6.0 native repository by repinning only compatible managed release metadata and trust state; canonical memories/projects remain untouched and indexes are deterministically rebuilt. The deliberately narrow GitMemo predecessor bridge also remains available: an exact trusted GitMemo v0.5.0 repository (`repository_format` 1, schema 1, contract 6, lock 1) can migrate directly to the current native Runethread state. Unknown, mixed, or tampered control state is refused rather than guessed.
+Runethread v0.8.0 introduces contract version 8 and explicit runtime/contract-release separation. It recognizes the exact trusted native v0.6.0 and v0.7.0 contract-v7 source anchors and migrates them to the v0.8.0 contract while preserving canonical memory/project bytes. The migration also adds the managed root `.gitattributes` support file when absent and refuses to overwrite conflicting custom Git attributes. The deliberately narrow GitMemo predecessor bridge remains available for the exact trusted GitMemo v0.5.0 state. Unknown, mixed, newer-unknown, customized, tampered, or unsafe authoritative source state is refused rather than guessed.
 
 ---
 
@@ -153,14 +159,14 @@ The public implementation owns:
 - `runethread-bootstrap.json` — machine-readable setup/discovery manifest;
 - `cmd/runethread/` — CLI entry point;
 - `internal/` — parsing, indexing, trust verification, validation, initialization, and upgrades;
-- `MEMORY_PROTOCOL.md` — canonical memory-operation protocol shipped in each release;
+- `MEMORY_PROTOCOL.md` — canonical memory-operation protocol shipped in each contract release;
 - `schema/` — canonical memory schema;
 - `docs/` — format, taxonomy, index, trust, validation, extension, compatibility, and repository-role documentation;
 - `templates/` — authoring scaffolds for the eight core memory types;
 - `.github/workflows/validate.yml` — source CI;
 - `.github/workflows/release.yml` — release pipeline.
 
-A generated private memory repository contains the pinned/vendored operational contract plus user-owned `memories/`, `projects/`, and generated `index/` data. The Go implementation source itself is not copied into user repositories.
+A generated private memory repository contains the pinned/vendored operational contract plus user-owned `memories/`, `projects/`, and generated `index/` data. Fresh v8 repositories also include a managed `.gitattributes` support file for byte-stable LF checkouts. The Go implementation source itself is not copied into user repositories.
 
 ---
 
@@ -191,7 +197,9 @@ The Phase 2 MemoryService commands provide the deterministic automation boundary
 
 `runethread index --mark-stale` records that generated discovery data may be incomplete when a source write cannot immediately be followed by deterministic regeneration.
 
-`runethread trust version` is the small stable bootstrap command used by validation CI to resolve the official release pinned in `.runethread/lock.json`; the resolved release performs full validation.
+`runethread trust version` is the small stable bootstrap command used by validation CI to resolve the official **contract release** pinned in `.runethread/lock.json`; the resolved contract release performs full validation.
+
+`runethread version` reports the runtime/distribution release. `runethread status` reports runtime and contract release identities separately.
 
 ---
 
@@ -210,9 +218,9 @@ Index v2 uses:
 A stale index is a degraded-search condition, not loss of canonical memory:
 
 - `runethread validate` may report stale indexes as warnings;
-- `runethread index --check` is the strict freshness gate;
+- `runethread index --check` is the strict freshness/integrity gate;
 - `index/STALE` is the explicit dirty marker for clients that cannot regenerate immediately;
-- clients must fall back to canonical files or repository search when index freshness is unknown.
+- clients must fall back to valid canonical files or repository search when index freshness is unknown.
 
 No SQLite server, vector database, embedding service, or paid backend is required. Future disposable acceleration may be added without changing canonical Git data.
 
@@ -232,11 +240,13 @@ See [`docs/EXTENDING_RUNETHREAD.md`](docs/EXTENDING_RUNETHREAD.md).
 
 ## Release and compatibility policy
 
-Official release tags are operational trust anchors; mutable `main` is development source.
+Official contract-release tags are immutable operational trust anchors; mutable `main` is development source. Runtime releases are distribution identities and may advance independently when the embedded contract is unchanged.
 
-The v0.6.0 cutover deliberately preserves old Git history, tags, and release artifacts rather than rewriting them. Native Runethread compatibility begins at repository format 2. The one supported legacy bridge in v0.6.0 is the explicitly tested GitMemo v0.5.0 -> Runethread v0.6.0 migration described above and in [`docs/runethread/MIGRATION.md`](docs/runethread/MIGRATION.md).
+The v0.6.0 cutover deliberately preserves old Git history, tags, and release artifacts rather than rewriting them. Native Runethread compatibility begins at repository format 2. Historical migration support is explicit and tested rather than inferred from mutable current generators.
 
-Future breaking repository changes should ship with explicit migration logic and regression fixtures for supported Runethread releases rather than requiring users to recreate canonical memory.
+Future breaking repository-contract changes should ship with explicit migration logic and regression fixtures for supported historical source anchors rather than requiring users to recreate canonical memory. Runtime-only releases should not churn unchanged memory repositories.
+
+See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 ---
 
