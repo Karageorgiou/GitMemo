@@ -103,8 +103,11 @@ DEPENDABOT_NEEDLES = (
 )
 
 CODEOWNERS_NEEDLES = (
+    "/.gitattributes @Karageorgiou",
     "/AGENTS.md @Karageorgiou",
     "/docs/runethread/ENGINEERING_PROCESS.md @Karageorgiou",
+    "/docs/runethread/DEVELOPMENT_PIPELINE.md @Karageorgiou",
+    "/.github/pull_request_template.md @Karageorgiou",
     "/.github/workflows/ @Karageorgiou",
     "/internal/trust/ @Karageorgiou",
     "/internal/upgrader/ @Karageorgiou",
