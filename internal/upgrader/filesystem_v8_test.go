@@ -42,6 +42,18 @@ func TestManagedGitAttributesOwnershipRejectsCustomOrSymlink(t *testing.T) {
 	}
 }
 
+func TestRequireMigrationRootRejectsSymlink(t *testing.T) {
+	realRoot := t.TempDir()
+	parent := t.TempDir()
+	rootLink := filepath.Join(parent, "repo")
+	if err := os.Symlink(realRoot, rootLink); err != nil {
+		t.Skipf("symbolic links unavailable: %v", err)
+	}
+	if err := requireMigrationRoot(rootLink); err == nil || !strings.Contains(err.Error(), "unsafe repository root") {
+		t.Fatalf("symlink root error = %v", err)
+	}
+}
+
 func TestTakeRegularSnapshotsRejectsSymlinkAndPreservesRegularBytes(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "managed.txt"), []byte("managed\n"))
