@@ -87,8 +87,7 @@ func verifyNativeSourceAnchor(root string, anchor nativeSourceAnchor) error {
 		return fmt.Errorf("internal trusted %s source anchor digest %s does not match declared contract digest %s", anchor.ReleaseVersion, got, anchor.ContractSHA256)
 	}
 
-	lockPath := filepath.Join(root, buildinfo.ManagedMetadataDir, "lock.json")
-	data, err := readRegularFile(lockPath)
+	data, err := readNativeAnchorFile(root, buildinfo.ManagedMetadataDir+"/lock.json")
 	if err != nil {
 		return fmt.Errorf("read native %s trust lock: %w", anchor.ReleaseVersion, err)
 	}
@@ -115,7 +114,7 @@ func verifyNativeSourceAnchor(root string, anchor nativeSourceAnchor) error {
 		if actual.FilesSHA256[rel] != expectedHash {
 			return fmt.Errorf("native trust lock digest for %s does not match trusted %s", rel, anchor.ReleaseVersion)
 		}
-		local, err := readRegularFile(filepath.Join(root, filepath.FromSlash(rel)))
+		local, err := readNativeAnchorFile(root, rel)
 		if err != nil {
 			return fmt.Errorf("verify native %s control-plane file %s: %w", anchor.ReleaseVersion, rel, err)
 		}
@@ -129,4 +128,11 @@ func verifyNativeSourceAnchor(root string, anchor nativeSourceAnchor) error {
 		}
 	}
 	return nil
+}
+
+func readNativeAnchorFile(root, rel string) ([]byte, error) {
+	if buildinfo.ContractVersion >= 8 {
+		return readRepositoryRegularFile(root, rel)
+	}
+	return readRegularFile(filepath.Join(root, filepath.FromSlash(rel)))
 }
