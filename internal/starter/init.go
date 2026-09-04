@@ -15,6 +15,13 @@ import (
 	"github.com/runethread/core/internal/trust"
 )
 
+const memoryRepoGitAttributes = `# Runethread hashes and validates text bytes. Keep repository text canonical
+# across operating systems regardless of a developer's global core.autocrlf.
+* text=auto eol=lf
+
+*.exe binary
+`
+
 const memoryRepoReadmeTemplate = `# Runethread Memory
 
 Private, user-owned persistent memory for AI assistants.
@@ -30,6 +37,7 @@ This repository contains memory data and a locally vendored copy of the operatio
 
 ## Repository contents
 
+- ` + "`.gitattributes`" + ` — canonical LF text policy for byte-stable cross-platform Git checkouts.
 - ` + "`MEMORY_PROTOCOL.md`" + ` — mandatory operating instructions from the pinned release.
 - ` + "`docs/TRUST_MODEL.md`" + ` — control-plane/data-plane trust boundary.
 - ` + "`docs/USER_COMMANDS.md`" + ` — user-facing store/search command contract.
@@ -67,10 +75,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out memory repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.27.0'
 
@@ -108,6 +116,10 @@ func MemoryRepoReadme() []byte {
 	return []byte(memoryRepoReadmeTemplate)
 }
 
+func GitAttributes() []byte {
+	return []byte(memoryRepoGitAttributes)
+}
+
 func ValidationWorkflow() []byte {
 	return []byte(memoryValidationWorkflowTemplate)
 }
@@ -139,6 +151,9 @@ func Init(root string) error {
 		return fmt.Errorf("create target directory: %w", err)
 	}
 
+	if err := writeNew(root, ".gitattributes", GitAttributes()); err != nil {
+		return err
+	}
 	for _, rel := range runethread.ContractPaths() {
 		data, err := fs.ReadFile(runethread.ContractFS, rel)
 		if err != nil {
