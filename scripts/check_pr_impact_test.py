@@ -47,6 +47,32 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
         self.git("commit", "-m", message)
         return self.git("rev-parse", "HEAD")
 
+    def buildinfo_text(
+        self,
+        *,
+        release: str = "v0.7.0",
+        contract_release: str | None = None,
+        repository_format: int = 2,
+        schema_version: int = 1,
+        contract_version: int = 7,
+        index_format: int = 2,
+        trust_lock: int = 2,
+    ) -> str:
+        contract_release_line = ""
+        if contract_release is not None:
+            contract_release_line = f'\tContractReleaseVersion = "{contract_release}"\n'
+        return (
+            "package buildinfo\n\nconst (\n"
+            f'\tReleaseVersion = "{release}"\n'
+            f"{contract_release_line}"
+            f"\tRepositoryFormatVersion = {repository_format}\n"
+            f"\tSchemaVersion = {schema_version}\n"
+            f"\tContractVersion = {contract_version}\n"
+            f"\tIndexFormatVersion = {index_format}\n"
+            f"\tTrustLockVersion = {trust_lock}\n"
+            ")\n"
+        )
+
     def initialize_repository(
         self,
         *,
@@ -55,17 +81,14 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
         contract_version: int = 7,
         schema_version: int = 1,
     ) -> str:
-        contract_release_line = ""
-        if contract_release is not None:
-            contract_release_line = f'\tContractReleaseVersion = "{contract_release}"\n'
         self.write(
             "internal/buildinfo/version.go",
-            "package buildinfo\n\nconst (\n"
-            f'\tReleaseVersion = "{release}"\n'
-            f"{contract_release_line}"
-            f"\tContractVersion = {contract_version}\n"
-            f"\tSchemaVersion = {schema_version}\n"
-            ")\n",
+            self.buildinfo_text(
+                release=release,
+                contract_release=contract_release,
+                contract_version=contract_version,
+                schema_version=schema_version,
+            ),
         )
         self.write(
             "contract.go",
@@ -81,6 +104,11 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
         self.write("internal/upgrader/upgrader.go", "package upgrader\n")
         self.write("internal/upgrader/testdata/baseline/README.txt", "fixture\n")
         return self.commit("baseline")
+
+    def write_migration_evidence(self) -> None:
+        self.write("docs/COMPATIBILITY.md", "updated compatibility\n")
+        self.write("internal/upgrader/upgrader.go", "package upgrader\n// migration update\n")
+        self.write("internal/upgrader/testdata/runethread-v0.7.0/README.txt", "exact fixture marker\n")
 
     def run_guard(self, base: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -120,25 +148,42 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
         base = self.initialize_repository()
         self.write(
             "internal/buildinfo/version.go",
-            "package buildinfo\n\nconst (\n"
-            '\tReleaseVersion = "v0.8.0"\n'
-            '\tContractReleaseVersion = "v0.8.0"\n'
-            "\tContractVersion = 8\n"
-            "\tSchemaVersion = 1\n"
-            ")\n",
+            self.buildinfo_text(
+                release="v0.8.0",
+                contract_release="v0.8.0",
+                contract_version=8,
+            ),
         )
         self.write("MEMORY_PROTOCOL.md", "contract v8 semantics\n")
-        self.write("docs/COMPATIBILITY.md", "v0.7 -> v0.8 contract migration\n")
-        self.write("internal/upgrader/upgrader.go", "package upgrader\n// v0.7 to v0.8\n")
-        self.write("internal/upgrader/testdata/runethread-v0.7.0/README.txt", "exact fixture marker\n")
+        self.write_migration_evidence()
         self.commit("contract migration")
 
         result = self.run_guard(base)
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("embedded contract change detected", result.stdout)
-        self.assertIn("contract version: 7 -> 8", result.stdout)
+        self.assertIn("ContractVersion: 7 -> 8", result.stdout)
         self.assertIn("contract release anchor: v0.7.0 -> v0.8.0", result.stdout)
+
+    def test_testdata_alone_does_not_count_as_upgrader_change(self) -> None:
+        base = self.initialize_repository()
+        self.write(
+            "internal/buildinfo/version.go",
+            self.buildinfo_text(
+                release="v0.8.0",
+                contract_release="v0.8.0",
+                contract_version=8,
+            ),
+        )
+        self.write("MEMORY_PROTOCOL.md", "contract v8 semantics\n")
+        self.write("docs/COMPATIBILITY.md", "updated compatibility\n")
+        self.write("internal/upgrader/testdata/runethread-v0.7.0/README.txt", "fixture only\n")
+        self.commit("incomplete migration")
+
+        result = self.run_guard(base)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no upgrader implementation/test changed", result.stderr)
 
     def test_runtime_only_release_after_split_does_not_require_contract_bump(self) -> None:
         base = self.initialize_repository(
@@ -148,12 +193,11 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
         )
         self.write(
             "internal/buildinfo/version.go",
-            "package buildinfo\n\nconst (\n"
-            '\tReleaseVersion = "v0.9.0"\n'
-            '\tContractReleaseVersion = "v0.8.0"\n'
-            "\tContractVersion = 8\n"
-            "\tSchemaVersion = 1\n"
-            ")\n",
+            self.buildinfo_text(
+                release="v0.9.0",
+                contract_release="v0.8.0",
+                contract_version=8,
+            ),
         )
         self.commit("runtime-only release")
 
@@ -161,6 +205,39 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no embedded contract-path change detected", result.stdout)
+
+    def test_contract_anchor_change_requires_migration_evidence(self) -> None:
+        base = self.initialize_repository()
+        self.write(
+            "internal/buildinfo/version.go",
+            self.buildinfo_text(release="v0.8.0"),
+        )
+        self.commit("unmigrated contract reanchor")
+
+        result = self.run_guard(base)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("docs/COMPATIBILITY.md was not updated", result.stderr)
+        self.assertIn("no upgrader implementation/test changed", result.stderr)
+        self.assertIn("no frozen historical upgrader testdata changed", result.stderr)
+
+    def test_contract_version_cannot_advance_without_contract_bytes(self) -> None:
+        base = self.initialize_repository()
+        self.write(
+            "internal/buildinfo/version.go",
+            self.buildinfo_text(
+                release="v0.8.0",
+                contract_release="v0.8.0",
+                contract_version=8,
+            ),
+        )
+        self.write_migration_evidence()
+        self.commit("version-only contract bump")
+
+        result = self.run_guard(base)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ContractVersion changed but no embedded contract path", result.stderr)
 
     def test_schema_change_without_schema_version_bump_fails(self) -> None:
         base = self.initialize_repository()
@@ -171,6 +248,34 @@ class ImpactGuardIntegrationTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("SchemaVersion did not advance", result.stderr)
+
+    def test_schema_version_cannot_advance_without_schema_bytes(self) -> None:
+        base = self.initialize_repository()
+        self.write(
+            "internal/buildinfo/version.go",
+            self.buildinfo_text(schema_version=2),
+        )
+        self.write_migration_evidence()
+        self.commit("version-only schema bump")
+
+        result = self.run_guard(base)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SchemaVersion changed but schema/memory-item.schema.json did not change", result.stderr)
+
+    def test_repository_format_change_requires_contract_bytes(self) -> None:
+        base = self.initialize_repository()
+        self.write(
+            "internal/buildinfo/version.go",
+            self.buildinfo_text(repository_format=3),
+        )
+        self.write_migration_evidence()
+        self.commit("version-only repository format bump")
+
+        result = self.run_guard(base)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RepositoryFormatVersion changed but no embedded contract path", result.stderr)
 
     def test_contract_manifest_change_is_treated_as_contract_change(self) -> None:
         base = self.initialize_repository()
