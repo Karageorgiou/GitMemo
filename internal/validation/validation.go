@@ -45,10 +45,10 @@ func Validate(root string) []Issue {
 		add("TRUST_LOCK", filepath.Join(root, filepath.FromSlash(problem.Path)), problem.Message)
 	}
 
-	if err := memory.ValidateSchemaContract(root); err != nil {
+	if err := validateSchemaContractForRepository(root); err != nil {
 		add("SCHEMA_CONTRACT", filepath.Join(root, "schema", "memory-item.schema.json"), err.Error())
 	}
-	sidecars, markdown, err := memory.Discover(root)
+	sidecars, markdown, err := discoverMemoryFiles(root)
 	if err != nil {
 		add("DISCOVERY", filepath.Join(root, "memories"), err.Error())
 		return sortIssues(issues)
@@ -76,7 +76,7 @@ func Validate(root string) []Issue {
 	records := make([]memory.Record, 0, len(sidecars))
 	byID := map[string][]memory.Record{}
 	for _, p := range sidecars {
-		m, problems := memory.Load(p)
+		m, problems := loadMemorySidecar(root, p)
 		if len(problems) > 0 {
 			for _, problem := range problems {
 				add("SCHEMA", p, problem.Error())
@@ -227,7 +227,6 @@ func checkOpenLoopForm(status, text string, add func(string, string)) {
 				add("OPEN_LOOP_MARKDOWN_FORM", fmt.Sprintf("status %q requires heading %q", status, h))
 			}
 		}
-	}
 	forbid := func(names ...string) {
 		for _, h := range names {
 			if headings[h] {
