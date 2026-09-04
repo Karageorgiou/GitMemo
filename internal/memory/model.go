@@ -15,6 +15,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/fsafety"
 )
 
 const ExpectedSchemaContractSHA256 = "064ad5ef7fcdaacd086a0bf21ae4de6b62006498f6a451a2fcf7b9bcbdb05f5b"
@@ -96,8 +99,13 @@ func (p SchemaProblem) Error() string {
 }
 
 func ValidateSchemaContract(root string) error {
-	path := filepath.Join(root, "schema", "memory-item.schema.json")
-	data, err := os.ReadFile(path)
+	var data []byte
+	var err error
+	if buildinfo.ContractVersion >= 8 {
+		data, err = fsafety.ReadRegularFileUnder(root, "schema/memory-item.schema.json")
+	} else {
+		data, err = os.ReadFile(filepath.Join(root, "schema", "memory-item.schema.json"))
+	}
 	if err != nil {
 		return fmt.Errorf("read schema: %w", err)
 	}
@@ -135,15 +143,27 @@ func canonicalJSONSHA256(data []byte) (string, error) {
 
 func Discover(root string) (sidecars []string, markdown []string, err error) {
 	base := filepath.Join(root, "memories")
-	info, statErr := os.Stat(base)
-	if statErr != nil {
-		if os.IsNotExist(statErr) {
-			return nil, nil, nil
+	if buildinfo.ContractVersion >= 8 {
+		if _, statErr := os.Lstat(base); statErr != nil {
+			if os.IsNotExist(statErr) {
+				return nil, nil, nil
+			}
+			return nil, nil, statErr
 		}
-		return nil, nil, statErr
-	}
-	if !info.IsDir() {
-		return nil, nil, fmt.Errorf("memories is not a directory")
+		if err := fsafety.RequireTree(root, "memories"); err != nil {
+			return nil, nil, fmt.Errorf("unsafe memories tree: %w", err)
+		}
+	} else {
+		info, statErr := os.Stat(base)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				return nil, nil, nil
+			}
+			return nil, nil, statErr
+		}
+		if !info.IsDir() {
+			return nil, nil, fmt.Errorf("memories is not a directory")
+		}
 	}
 	err = filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -180,7 +200,17 @@ func LoadAll(root string) ([]Record, error) {
 	}
 	records := make([]Record, 0, len(sidecars))
 	for _, path := range sidecars {
-		m, problems := Load(path)
+		var m Memory
+		var problems []SchemaProblem
+		if buildinfo.ContractVersion >= 8 {
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				return nil, relErr
+			}
+			m, problems = LoadUnder(root, filepath.ToSlash(rel))
+		} else {
+			m, problems = Load(path)
+		}
 		if len(problems) > 0 {
 			return nil, fmt.Errorf("%s: %s", relative(root, path), problems[0].Error())
 		}
@@ -258,7 +288,6 @@ func validateRequired(root map[string]json.RawMessage) []SchemaProblem {
 						require(item, fmt.Sprintf("provenance.sources[%d].", i), "kind", "locator", "revision", "note")
 					}
 				}
-			}
 		}
 	}
 	if raw, ok := root["relationships"]; ok && string(bytes.TrimSpace(raw)) != "null" {
@@ -271,6 +300,9 @@ func validateRequired(root map[string]json.RawMessage) []SchemaProblem {
 	}
 	if raw, ok := root["entities"]; ok && string(bytes.TrimSpace(raw)) != "null" {
 		var items []map[string]json.RawMessage
+		if json.Unmarshal(raw, &obj) == nil {
+			_ = obj
+		}
 		if json.Unmarshal(raw, &items) == nil {
 			for i, item := range items {
 				require(item, fmt.Sprintf("entities[%d].", i), "kind", "name")
