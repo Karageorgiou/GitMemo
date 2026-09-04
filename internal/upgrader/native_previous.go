@@ -20,12 +20,12 @@ const (
 type nativeSourceAnchor struct {
 	ReleaseVersion   string
 	RepositoryFormat int
-	SchemaVersion     int
-	ContractVersion   int
-	LockVersion       int
-	SourceRepository  string
-	ContractSHA256    string
-	FilesSHA256       map[string]string
+	SchemaVersion    int
+	ContractVersion  int
+	LockVersion      int
+	SourceRepository string
+	ContractSHA256   string
+	FilesSHA256      map[string]string
 }
 
 var nativeContractV7Files = map[string]string{
@@ -56,12 +56,12 @@ func nativeSourceAnchorFor(release string) (nativeSourceAnchor, bool) {
 		return nativeSourceAnchor{
 			ReleaseVersion:   release,
 			RepositoryFormat: 2,
-			SchemaVersion:     1,
-			ContractVersion:   7,
-			LockVersion:       2,
-			SourceRepository:  "runethread/core",
-			ContractSHA256:    nativeContractV7SHA256,
-			FilesSHA256:       nativeContractV7Files,
+			SchemaVersion:    1,
+			ContractVersion:  7,
+			LockVersion:      2,
+			SourceRepository: "runethread/core",
+			ContractSHA256:   nativeContractV7SHA256,
+			FilesSHA256:      nativeContractV7Files,
 		}, true
 	default:
 		return nativeSourceAnchor{}, false
