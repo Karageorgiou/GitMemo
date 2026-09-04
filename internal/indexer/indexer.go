@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/fsafety"
 	"github.com/runethread/core/internal/memory"
 )
 
@@ -378,38 +379,12 @@ func projectDisplayName(root, slug string) string {
 
 func requireOptionalRegularTree(root, rel string) error {
 	base := filepath.Join(root, filepath.FromSlash(rel))
-	info, err := os.Lstat(base)
-	if os.IsNotExist(err) {
+	if _, err := os.Lstat(base); os.IsNotExist(err) {
 		return nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%s is a symbolic link", base)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", base)
-	}
-	return filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%s is a symbolic link", path)
-		}
-		if d.IsDir() {
-			return nil
-		}
-		entryInfo, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if !entryInfo.Mode().IsRegular() {
-			return fmt.Errorf("%s is not a regular file", path)
-		}
-		return nil
-	})
+	return fsafety.RequireTree(root, rel)
 }
 
 func sortedKeys[T any](m map[string][]T) []string {
