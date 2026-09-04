@@ -8,10 +8,13 @@ import sys
 from pathlib import Path
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
+USES_RE = re.compile(r"(?m)^\s*uses:\s*([^\s#]+)")
 
 REQUIRED_FILES = (
+    ".gitattributes",
     "AGENTS.md",
     "docs/runethread/ENGINEERING_PROCESS.md",
+    "docs/runethread/DEVELOPMENT_PIPELINE.md",
     "docs/runethread/CURRENT_MILESTONE.md",
     ".github/pull_request_template.md",
     ".github/workflows/validate.yml",
@@ -47,9 +50,12 @@ VALIDATE_NEEDLES = (
 AGENT_NEEDLES = (
     "MUST",
     "ENGINEERING_PROCESS.md",
+    "DEVELOPMENT_PIPELINE.md",
     "CURRENT_MILESTONE.md",
     "Validation is read-only",
     "Fail closed",
+    "Respect the process/product scope boundary",
+    "Do not hide platform defects",
 )
 
 PROCESS_NEEDLES = (
@@ -65,6 +71,32 @@ PROCESS_NEEDLES = (
     "Stop conditions",
 )
 
+PIPELINE_NEEDLES = (
+    "Mandatory semantic scope boundary",
+    "Cheap deterministic gates",
+    "Linux deterministic quality gate",
+    "Cross-platform gate",
+    "CI self-protection and supply-chain baseline",
+    "Draft PR gate",
+    "Merge and post-merge gate",
+    "Mandatory future-agent behavior",
+    "Cross-platform failures MUST NOT",
+    "contents: read",
+    "gofmt -l",
+    "git diff --check",
+    "go test -race -count=1 ./...",
+    "macos-latest",
+    "windows-latest",
+)
+
+PR_NEEDLES = (
+    "Development infrastructure / CI / engineering policy",
+    "Scope-boundary decision",
+    "Mandatory pipeline on exact head",
+    "No platform was removed/skipped/weakened to obtain green CI",
+    "required final `validate` job passed on the exact reviewed head",
+)
+
 DEPENDABOT_NEEDLES = (
     'package-ecosystem: "gomod"',
     'package-ecosystem: "github-actions"',
@@ -78,6 +110,11 @@ CODEOWNERS_NEEDLES = (
     "/internal/upgrader/ @Karageorgiou",
 )
 
+GITATTRIBUTES_NEEDLES = (
+    "* text=auto eol=lf",
+    "*.exe binary",
+)
+
 
 def read(root: Path, rel: str, errors: list[str]) -> str:
     path = root / rel
@@ -89,14 +126,37 @@ def read(root: Path, rel: str, errors: list[str]) -> str:
 
 
 def check_action_pins(rel: str, text: str, errors: list[str]) -> None:
-    for action in ("actions/checkout", "actions/setup-go"):
-        matches = re.findall(rf"uses:\s*{re.escape(action)}@([^\s#]+)", text)
-        if not matches:
-            errors.append(f"{rel}: missing {action} usage")
+    uses = USES_RE.findall(text)
+    if not uses:
+        errors.append(f"{rel}: no actions are declared")
+        return
+
+    seen_checkout = False
+    seen_setup_go = False
+    for target in uses:
+        if target.startswith("./"):
             continue
-        for ref in matches:
-            if not SHA40.fullmatch(ref):
-                errors.append(f"{rel}: {action} must use an immutable 40-hex commit SHA, got {ref!r}")
+        if "@" not in target:
+            errors.append(f"{rel}: external action {target!r} must be pinned with @<40-hex-sha>")
+            continue
+        action, ref = target.rsplit("@", 1)
+        if action == "actions/checkout":
+            seen_checkout = True
+        if action == "actions/setup-go":
+            seen_setup_go = True
+        if not SHA40.fullmatch(ref):
+            errors.append(f"{rel}: external action {action} must use an immutable 40-hex commit SHA, got {ref!r}")
+
+    if not seen_checkout:
+        errors.append(f"{rel}: missing actions/checkout usage")
+    if not seen_setup_go:
+        errors.append(f"{rel}: missing actions/setup-go usage")
+
+
+def require_needles(label: str, text: str, needles: tuple[str, ...], errors: list[str]) -> None:
+    for needle in needles:
+        if needle not in text:
+            errors.append(f"{label}: missing mandatory policy marker {needle!r}")
 
 
 def check(root: Path) -> list[str]:
@@ -105,12 +165,15 @@ def check(root: Path) -> list[str]:
         if not (root / rel).is_file():
             errors.append(f"{rel}: required development-safety file is missing")
 
+    gitattributes = read(root, ".gitattributes", errors)
     validate = read(root, ".github/workflows/validate.yml", errors)
     release = read(root, ".github/workflows/release.yml", errors)
     dependabot = read(root, ".github/dependabot.yml", errors)
     codeowners = read(root, ".github/CODEOWNERS", errors)
+    pr_template = read(root, ".github/pull_request_template.md", errors)
     agents = read(root, "AGENTS.md", errors)
     process = read(root, "docs/runethread/ENGINEERING_PROCESS.md", errors)
+    pipeline = read(root, "docs/runethread/DEVELOPMENT_PIPELINE.md", errors)
 
     if "pull_request_target:" in validate:
         errors.append("validate.yml: pull_request_target is forbidden for validation CI")
@@ -126,19 +189,13 @@ def check(root: Path) -> list[str]:
     if not re.search(r"(?m)^\s*contents:\s*write\s*$", release):
         errors.append("release.yml: release publication requires explicit contents: write")
 
-    for needle in DEPENDABOT_NEEDLES:
-        if needle not in dependabot:
-            errors.append(f"dependabot.yml: missing mandatory update ecosystem {needle!r}")
-    for needle in CODEOWNERS_NEEDLES:
-        if needle not in codeowners:
-            errors.append(f"CODEOWNERS: missing safety-critical ownership rule {needle!r}")
-
-    for needle in AGENT_NEEDLES:
-        if needle not in agents:
-            errors.append(f"AGENTS.md: missing mandatory policy marker {needle!r}")
-    for needle in PROCESS_NEEDLES:
-        if needle not in process:
-            errors.append(f"ENGINEERING_PROCESS.md: missing mandatory process section {needle!r}")
+    require_needles(".gitattributes", gitattributes, GITATTRIBUTES_NEEDLES, errors)
+    require_needles("dependabot.yml", dependabot, DEPENDABOT_NEEDLES, errors)
+    require_needles("CODEOWNERS", codeowners, CODEOWNERS_NEEDLES, errors)
+    require_needles("AGENTS.md", agents, AGENT_NEEDLES, errors)
+    require_needles("ENGINEERING_PROCESS.md", process, PROCESS_NEEDLES, errors)
+    require_needles("DEVELOPMENT_PIPELINE.md", pipeline, PIPELINE_NEEDLES, errors)
+    require_needles("pull_request_template.md", pr_template, PR_NEEDLES, errors)
 
     return errors
 
