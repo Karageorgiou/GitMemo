@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/runethread/core/internal/fsafety"
 )
 
 const ExpectedSchemaContractSHA256 = "064ad5ef7fcdaacd086a0bf21ae4de6b62006498f6a451a2fcf7b9bcbdb05f5b"
@@ -96,8 +98,7 @@ func (p SchemaProblem) Error() string {
 }
 
 func ValidateSchemaContract(root string) error {
-	path := filepath.Join(root, "schema", "memory-item.schema.json")
-	data, err := os.ReadFile(path)
+	data, err := fsafety.ReadRegularFileUnder(root, "schema/memory-item.schema.json")
 	if err != nil {
 		return fmt.Errorf("read schema: %w", err)
 	}
@@ -135,22 +136,32 @@ func canonicalJSONSHA256(data []byte) (string, error) {
 
 func Discover(root string) (sidecars []string, markdown []string, err error) {
 	base := filepath.Join(root, "memories")
-	info, statErr := os.Stat(base)
-	if statErr != nil {
+	if _, statErr := os.Lstat(base); statErr != nil {
 		if os.IsNotExist(statErr) {
 			return nil, nil, nil
 		}
 		return nil, nil, statErr
 	}
-	if !info.IsDir() {
-		return nil, nil, fmt.Errorf("memories is not a directory")
+	if err := fsafety.RequireDirectory(base); err != nil {
+		return nil, nil, fmt.Errorf("unsafe memories directory: %w", err)
 	}
+
 	err = filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a symbolic link", path)
+		}
 		if d.IsDir() {
 			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", path)
 		}
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".json":
@@ -166,7 +177,7 @@ func Discover(root string) (sidecars []string, markdown []string, err error) {
 }
 
 func Load(path string) (Memory, []SchemaProblem) {
-	data, err := os.ReadFile(path)
+	data, err := fsafety.ReadRegularFile(path)
 	if err != nil {
 		return Memory{}, []SchemaProblem{{Message: err.Error()}}
 	}
