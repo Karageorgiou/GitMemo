@@ -60,16 +60,6 @@ func DiscoverStrict(root string) (sidecars []string, markdown []string, err erro
 	return sidecars, markdown, err
 }
 
-// LoadUnder reads one repository-relative memory sidecar without following
-// symbolic links in the repository path.
-func LoadUnder(root, rel string) (Memory, []SchemaProblem) {
-	data, err := fsafety.ReadRegularFileUnder(root, rel)
-	if err != nil {
-		return Memory{}, []SchemaProblem{{Message: err.Error()}}
-	}
-	return Decode(data)
-}
-
 // LoadAllStrict loads all canonical sidecars from a strict memories tree.
 func LoadAllStrict(root string) ([]Record, error) {
 	sidecars, _, err := DiscoverStrict(root)
