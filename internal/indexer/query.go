@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/runethread/core/internal/buildinfo"
 )
 
 var safeIndexKeyRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -172,6 +174,14 @@ func Search(root, query string, limit int) ([]SearchResult, error) {
 }
 
 func ensureIndexUsable(root string) error {
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireOptionalRegularTree(root, "index"); err != nil {
+			return fmt.Errorf("unsafe index tree: %w", err)
+		}
+		if err := requireOptionalRegularTree(root, "memories"); err != nil {
+			return fmt.Errorf("unsafe memories tree: %w", err)
+		}
+	}
 	if IsMarkedStale(root) {
 		return fmt.Errorf("Runethread index is explicitly marked stale; regenerate it or fall back to canonical memories/repository search")
 	}
