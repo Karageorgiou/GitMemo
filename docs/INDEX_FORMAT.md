@@ -6,7 +6,7 @@ Runethread indexes are deterministic, disposable discovery accelerators generate
 
 Index format v2 replaces the old monolithic `index/memories.jsonl` machine index with bounded, sharded lookup structures. The goals are fast targeted reads, smaller Git diffs, lower write contention between independent conversations or agents, and a layout that can scale without requiring an LLM to load one global catalog.
 
-The canonical memory remains the Markdown + JSON pair under `memories/`. If an index is stale, missing, damaged, or unsupported, operators MUST fall back to canonical source files or repository search.
+The canonical memory remains the Markdown + JSON pair under `memories/`. If an index is stale, missing, damaged, unsupported, or stored through unsafe repository filesystem objects, operators MUST fall back to valid canonical source files or repository search.
 
 ---
 
@@ -22,9 +22,9 @@ The canonical memory remains the Markdown + JSON pair under `memories/`. If an i
 - indexed term fields;
 - a description of the generated layout.
 
-Index-format versioning is separate from the memory sidecar schema. A Runethread release may change only generated indexes while preserving the canonical memory schema.
+Index-format versioning is separate from the memory sidecar schema and from runtime/distribution release identity. A runtime release may change while continuing to embed the same contract release and Index v2 bytes.
 
-The index format is controlled by the pinned Runethread release. Do not invent repository-local variants.
+The index format is controlled by the repository's pinned Runethread **contract release**. Do not invent repository-local variants, and do not repin an unchanged repository merely because a newer compatible runtime exists.
 
 ---
 
@@ -68,6 +68,8 @@ Only non-empty machine shards are created. A clean repository with no memories n
 `index/STALE`, when present, is an explicit dirty marker rather than a generated current-index file. It tells readers that committed discovery indexes MUST be treated as incomplete until regeneration succeeds.
 
 The entire `index/` directory is generated output. `runethread index --write` may replace its generated contents and remove obsolete files from older index formats.
+
+For contract v8, the `index/` directory and every generated shard read as repository state MUST be reached through a real repository root and real ancestor directories. Index files MUST be regular files. Symbolic links and unsupported special filesystem objects in the generated index tree are not valid shortcuts to matching bytes and MUST be rejected rather than followed.
 
 ---
 
@@ -176,6 +178,20 @@ This is a transparent first-stage discovery mechanism, not a semantic reasoning 
 
 ---
 
+## Canonical source filesystem integrity
+
+Index generation is only deterministic over valid canonical repository objects. For contract v8, source discovery MUST reject symbolic links or unsupported special objects in repository-owned canonical source trees rather than hash or index the bytes reached through them.
+
+In particular:
+
+- the repository root and traversed ancestors for `memories/` and `projects/` MUST be real directories;
+- canonical memory sidecars/Markdown and project source files used during deterministic generation MUST be regular files; and
+- path traversal or volume escape MUST NOT be accepted as an indexed source path.
+
+This object-integrity rule is part of source determinism. Two files with identical bytes are not equivalent index sources when one is reached through an unsupported symbolic-link path.
+
+---
+
 ## Freshness and `index/STALE`
 
 Canonical source data and generated indexes have different authority.
@@ -193,7 +209,7 @@ If a client can write repository files but cannot execute the Runethread indexer
 index/STALE
 ```
 
-using the standard stale-marker text from the pinned Runethread release. The marker MUST NOT be removed merely because an operator hopes indexes are current. Successful deterministic regeneration removes it by replacing the generated index tree.
+using the standard stale-marker text from the pinned contract release. The marker MUST NOT be removed merely because an operator hopes indexes are current. Successful deterministic regeneration removes it by replacing the generated index tree.
 
 Absence of `index/STALE` is useful but not cryptographic proof that no out-of-band source edit occurred. `runethread index --check` is the strict check because it regenerates expected output from canonical source state and compares the complete generated tree.
 
@@ -203,11 +219,11 @@ When freshness is unknown, treat index results as potentially incomplete and fal
 
 ## Source digest
 
-`memory_source_sha256` in `catalog.json` is computed deterministically over every sorted memory sidecar path and its exact bytes.
+`memory_source_sha256` in `catalog.json` is computed deterministically over every sorted canonical memory sidecar path and its exact bytes after the source tree has satisfied the contract-v8 filesystem-object rules.
 
 The digest makes the source state used to produce a committed machine index explicit and audit-friendly. Recomputing it requires reading canonical sidecars, so fast queries do not recompute it on every lookup.
 
-The digest is not a replacement for `runethread index --check`.
+The digest is not a replacement for filesystem-object validation or `runethread index --check`.
 
 ---
 
@@ -225,17 +241,18 @@ Human convenience indexes such as `open-loops.md` may still be shared files and 
 
 ## Failure behavior
 
-If index generation fails:
+If index generation or reading fails:
 
 - do not rewrite canonical memories to satisfy the indexer;
 - do not claim indexes are current;
+- reject unsafe symbolic-link/special-object repository paths instead of following them;
 - preserve or create the stale marker when possible;
-- diagnose the canonical validation error or indexer failure;
+- diagnose the canonical validation error, filesystem-object error, or indexer failure;
 - retry only after the source problem is understood.
 
-A validator may report stale indexes as warnings while canonical validation still passes.
+A validator may report stale indexes as warnings while canonical validation still passes. Unsafe authoritative filesystem objects are not a stale-cache condition and must be treated according to repository validation rules.
 
-`runethread index --check` is intentionally strict and fails when expected files are missing, bytes differ, obsolete generated files remain, or `index/STALE` exists.
+`runethread index --check` is intentionally strict and fails when expected files are missing, bytes differ, obsolete generated files remain, `index/STALE` exists, or the authoritative source/generated index tree is unsafe.
 
 ---
 

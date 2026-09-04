@@ -1,8 +1,8 @@
-# Repository Validation Specification — V1 data schema / contract v7
+# Repository Validation Specification — V1 data schema / contract v8
 
 ## Purpose
 
-`schema/memory-item.schema.json` defines the structural contract for one JSON sidecar. Repository validation also enforces invariants requiring control-plane files, memories, relationships, generated indexes, and time.
+`schema/memory-item.schema.json` defines the structural contract for one JSON sidecar. Repository validation also enforces invariants requiring control-plane files, memories, relationships, generated indexes, filesystem object integrity, and time.
 
 The canonical implementation is the Go CLI:
 
@@ -28,9 +28,9 @@ The JSON Schema remains the normative sidecar contract. The Go implementation de
 
 ### Control-plane enforcement strategy
 
-The native trust model uses `.runethread/lock.json`. The lock pins an official Runethread release and records raw SHA-256 digests for every vendored control-plane file plus an aggregate contract digest.
+The native trust model uses `.runethread/lock.json`. The lock pins an official Runethread **contract release** in `runethread_version` and records raw SHA-256 digests for every vendored control-plane file plus an aggregate contract digest.
 
-The validator compares repository lock metadata against the contract embedded in the running release, then hashes local vendored control-plane files. A modified control file is a hard trust error rather than a locally invented instruction.
+The runtime/distribution release is a separate identity. The validator compares repository lock metadata against the contract release embedded in the running runtime, then hashes local vendored control-plane files. A newer runtime may validate an unchanged repository only when it embeds the exact pinned contract release and the repository/schema/contract/index/trust compatibility dimensions remain supported. A modified control file is a hard trust error rather than a locally invented instruction.
 
 See `docs/TRUST_MODEL.md`.
 
@@ -40,20 +40,20 @@ See `docs/TRUST_MODEL.md`.
 
 Before treating vendored Runethread files as operational instructions, validation must confirm:
 
-1. `.runethread/lock.json` exists and parses;
-2. lock, repository, schema, and contract versions match the running pinned Runethread release;
+1. `.runethread/lock.json` exists as a repository-owned regular file and parses;
+2. lock, repository, schema, and contract versions match the embedded pinned contract release;
 3. `source_repository` is `runethread/core`;
-4. `runethread_version` matches the running pinned release;
-5. aggregate contract digest matches the running release;
-6. the per-file digest set exactly covers release control-plane paths;
-7. every local control-plane file hashes to the expected SHA-256 digest;
-8. `.runethread/config.json` agrees with pinned release metadata.
+4. `runethread_version` matches the embedded contract release, not merely the running runtime release;
+5. aggregate contract digest matches the embedded contract release;
+6. the per-file digest set exactly covers contract control-plane paths;
+7. every local control-plane file is a repository-owned regular file and hashes to the expected SHA-256 digest;
+8. `.runethread/config.json` is a repository-owned regular file and agrees with pinned contract metadata.
 
-A trust-lock mismatch is an `ERROR`.
+A trust-lock mismatch or unsafe authoritative filesystem object is an `ERROR`.
 
-The native validation workflow uses the v0.6 trust bootstrap only to resolve a supported release from `.runethread/lock.json`; it then installs that exact release and lets it perform full trust and repository validation.
+The native validation workflow uses the v0.6 trust bootstrap only to resolve a supported contract release from `.runethread/lock.json`; it then installs that exact release and lets it perform full trust and repository validation. A later runtime-only release does not require rewriting an unchanged repository contract pin.
 
-Legacy `.gitmemo` metadata is accepted only as input to the explicit v0.5.0 migration path. It is not valid native Runethread metadata.
+Legacy `.gitmemo` metadata is accepted only as input to an explicitly supported exact historical migration path. It is not valid native Runethread metadata.
 
 ---
 
@@ -164,9 +164,19 @@ For `open`, `blocked`, or `deferred`, Markdown must use the unresolved form in `
 
 ---
 
-# 10. Path integrity
+# 10. Path and filesystem-object integrity
 
-`content_path` must be repository-relative, stay under `memories/`, resolve without traversal, point to the exact paired Markdown file, and obey canonical filename form. Orphaned memory files and sidecars are invalid.
+`content_path` must be repository-relative, stay under `memories/`, resolve without traversal or volume escape, point to the exact paired Markdown file, and obey canonical filename form. Orphaned memory files and sidecars are invalid.
+
+Contract v8 also makes repository filesystem object identity fail-closed for authoritative inputs:
+
+- the repository root used for authoritative reads must be a real directory rather than a symbolic link;
+- repository-owned ancestor directories traversed for canonical/control-plane/index source reads must be real directories;
+- `memories/`, `projects/`, `index/`, schema/control-plane directories, and other traversed authoritative repository directories must not be accepted through symbolic links;
+- canonical memory files, schema/control-plane files, migration source files, and deterministic index source files must be regular files;
+- symbolic links and unsupported special filesystem objects in those authoritative trees are invalid rather than ignored or followed.
+
+Matching content bytes do not make an unsafe filesystem object valid. Migration/source verification must establish these conditions before writes, and rollback must preserve the original filesystem object state rather than copying bytes through a link target.
 
 ---
 
@@ -212,7 +222,7 @@ Generated indexes are reconstructed from authoritative sidecars and project sour
 runethread index --write .
 ```
 
-Index v2 is specified in `docs/INDEX_FORMAT.md`. The checker expects the complete deterministic generated tree for the pinned release. Obsolete generated files are not silently accepted as current.
+Index v2 is specified in `docs/INDEX_FORMAT.md`. The checker expects the complete deterministic generated tree for the pinned contract release. Obsolete generated files are not silently accepted as current.
 
 Use:
 
@@ -220,9 +230,9 @@ Use:
 runethread index --check .
 ```
 
-for the strict freshness check. It exits non-zero when expected derived files are missing/changed, unexpected or obsolete generated files remain, or `index/STALE` exists.
+for the strict freshness check. It exits non-zero when expected derived files are missing/changed, unexpected or obsolete generated files remain, `index/STALE` exists, or authoritative source/index filesystem objects are unsafe.
 
-`runethread validate .` has a different responsibility: trusted control plane and canonical repository data. Missing or stale generated indexes are `WARNING` conditions rather than hard repository-invalidating errors.
+`runethread validate .` has a different responsibility: trusted control plane and canonical repository data. Missing or stale generated indexes are `WARNING` conditions rather than hard repository-invalidating errors; unsafe authoritative filesystem objects remain hard errors.
 
 A write-capable client unable to regenerate SHOULD create or preserve `index/STALE`. Until regeneration, retrieval must treat index results as potentially incomplete and fall back to canonical files or repository search.
 
@@ -256,8 +266,9 @@ The CLI exits non-zero when any `ERROR` exists and supports human-readable and J
 
 The validator must cover at least:
 
-- pinned trust lock and vendored control-plane files match the running official release;
-- `.runethread/config.json` agrees with trust lock/release;
+- pinned trust lock and vendored control-plane files match the embedded official contract release;
+- `.runethread/config.json` agrees with trust lock/contract release;
+- authoritative repository paths reject symbolic links and unsupported special filesystem objects as specified above;
 - every `target_id` exists;
 - every memory UUID is globally unique;
 - filename short UUID belongs to sidecar UUID;
@@ -271,4 +282,4 @@ The validator must cover at least:
 - stale generated indexes are warnings while `runethread index --check` remains strict;
 - the Go validation contract is reviewed whenever canonical sidecar schema changes.
 
-These checks distinguish canonical repository validity from derived-cache freshness rather than conflating them.
+These checks distinguish canonical repository validity from derived-cache freshness and runtime-release identity rather than conflating them.
