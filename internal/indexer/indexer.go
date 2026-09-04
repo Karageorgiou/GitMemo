@@ -62,7 +62,13 @@ func Generate(root string) (Result, error) {
 			return Result{}, fmt.Errorf("unsafe projects tree: %w", err)
 		}
 	}
-	records, err := memory.LoadAll(root)
+	var records []memory.Record
+	var err error
+	if buildinfo.ContractVersion >= 8 {
+		records, err = memory.LoadAllStrict(root)
+	} else {
+		records, err = memory.LoadAll(root)
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -274,7 +280,6 @@ func renderProjects(root string) []byte {
 			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
 				b.WriteString("- " + item.label + ": `" + rel + "`\n")
 			}
-		}
 	}
 	return []byte(b.String())
 }
