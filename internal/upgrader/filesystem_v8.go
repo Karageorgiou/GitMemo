@@ -57,6 +57,9 @@ func readRepositoryRegularFile(root, rel string) ([]byte, error) {
 }
 
 func readOptionalRepositoryRegularFile(root, rel string) ([]byte, bool, error) {
+	if err := fsafety.RequireSafeWritePath(root, rel); err != nil {
+		return nil, false, fmt.Errorf("unsafe repository path %s: %w", rel, err)
+	}
 	path := filepath.Join(root, filepath.FromSlash(rel))
 	if _, err := os.Lstat(path); os.IsNotExist(err) {
 		return nil, false, nil
@@ -76,6 +79,9 @@ func takeRegularSnapshots(root string, paths []string) (map[string]snapshot, err
 	}
 	out := make(map[string]snapshot, len(paths))
 	for _, rel := range paths {
+		if err := fsafety.RequireSafeWritePath(root, rel); err != nil {
+			return nil, fmt.Errorf("unsafe managed path %s: %w", rel, err)
+		}
 		path := filepath.Join(root, filepath.FromSlash(rel))
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
