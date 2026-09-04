@@ -150,6 +150,20 @@ def test_missing_codeowner_for_workflows_fails() -> None:
         shutil.rmtree(root)
 
 
+def test_missing_codeowner_for_pipeline_policy_fails() -> None:
+    root = copy_repo_surface()
+    try:
+        path = root / ".github/CODEOWNERS"
+        text = path.read_text().replace(
+            "/docs/runethread/DEVELOPMENT_PIPELINE.md @Karageorgiou",
+            "/docs/runethread/DEVELOPMENT_PIPELINE.md @nobody",
+        )
+        path.write_text(text)
+        require_error(root, "/docs/runethread/DEVELOPMENT_PIPELINE.md @Karageorgiou")
+    finally:
+        shutil.rmtree(root)
+
+
 def test_pr_template_cannot_drop_scope_boundary_fails() -> None:
     root = copy_repo_surface()
     try:
