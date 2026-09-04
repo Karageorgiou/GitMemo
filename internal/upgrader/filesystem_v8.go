@@ -12,6 +12,17 @@ import (
 
 const managedGitAttributesPath = ".gitattributes"
 
+func requireMigrationRoot(root string) error {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve repository root: %w", err)
+	}
+	if err := fsafety.RequireDirectory(rootAbs); err != nil {
+		return fmt.Errorf("unsafe repository root: %w", err)
+	}
+	return nil
+}
+
 func checkManagedGitAttributesOwnership(root string) error {
 	path := filepath.Join(root, managedGitAttributesPath)
 	info, err := os.Lstat(path)
@@ -45,7 +56,24 @@ func readRepositoryRegularFile(root, rel string) ([]byte, error) {
 	return fsafety.ReadRegularFileUnder(root, rel)
 }
 
+func readOptionalRepositoryRegularFile(root, rel string) ([]byte, bool, error) {
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, fmt.Errorf("inspect %s: %w", rel, err)
+	}
+	data, err := readRepositoryRegularFile(root, rel)
+	if err != nil {
+		return nil, false, err
+	}
+	return data, true, nil
+}
+
 func takeRegularSnapshots(root string, paths []string) (map[string]snapshot, error) {
+	if err := requireMigrationRoot(root); err != nil {
+		return nil, err
+	}
 	out := make(map[string]snapshot, len(paths))
 	for _, rel := range paths {
 		path := filepath.Join(root, filepath.FromSlash(rel))
