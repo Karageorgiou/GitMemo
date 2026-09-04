@@ -17,6 +17,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILDINFO = "internal/buildinfo/version.go"
 CONTRACT_GO = "contract.go"
+SCHEMA_PATH = "schema/memory-item.schema.json"
+COMPATIBILITY_PATH = "docs/COMPATIBILITY.md"
+UPGRADER_PREFIX = "internal/upgrader/"
+UPGRADER_TESTDATA_PREFIX = "internal/upgrader/testdata/"
 
 
 def git(*args: str) -> str:
@@ -106,75 +110,149 @@ def main() -> int:
 
     contract_files_changed = sorted(changed & all_contract_paths)
     contract_manifest_changed = CONTRACT_GO in changed
-    contract_changed = bool(contract_files_changed or contract_manifest_changed)
+    embedded_contract_changed = bool(contract_files_changed or contract_manifest_changed)
 
     base_buildinfo = read_at(base, BUILDINFO)
     head_buildinfo = read_head(BUILDINFO)
 
-    base_contract_version = int_const(base_buildinfo, "ContractVersion")
-    head_contract_version = int_const(head_buildinfo, "ContractVersion")
     base_contract_release = contract_release_anchor(base_buildinfo)
     head_contract_release = contract_release_anchor(head_buildinfo)
+    contract_release_changed = base_contract_release != head_contract_release
+
+    version_names = (
+        "RepositoryFormatVersion",
+        "SchemaVersion",
+        "ContractVersion",
+        "IndexFormatVersion",
+        "TrustLockVersion",
+    )
+    base_versions = {name: int_const(base_buildinfo, name) for name in version_names}
+    head_versions = {name: int_const(head_buildinfo, name) for name in version_names}
+    changed_versions = {
+        name for name in version_names if base_versions[name] != head_versions[name]
+    }
+
+    compatibility_updated = COMPATIBILITY_PATH in changed
+    upgrader_code_or_test_changed = any(
+        path.startswith(UPGRADER_PREFIX)
+        and not path.startswith(UPGRADER_TESTDATA_PREFIX)
+        for path in changed
+    )
+    historical_testdata_changed = any(
+        path.startswith(UPGRADER_TESTDATA_PREFIX) for path in changed
+    )
 
     failures: list[str] = []
 
-    if contract_changed:
+    # Any change to the embedded operational contract must be explicitly
+    # versioned and anchored to a new immutable contract release.
+    if embedded_contract_changed:
         require(
-            head_contract_version != base_contract_version,
-            f"embedded contract changed but ContractVersion did not advance ({base_contract_version})",
+            "ContractVersion" in changed_versions,
+            "embedded contract changed but ContractVersion did not advance "
+            f"({base_versions['ContractVersion']})",
             failures,
         )
         require(
-            head_contract_release != base_contract_release,
+            contract_release_changed,
             "embedded contract changed but the contract release anchor did not advance "
             f"({base_contract_release})",
             failures,
         )
+
+    # A declared contract-version change without changed normative contract
+    # bytes/manifest is also invalid: the version must describe real contract
+    # semantics rather than becoming an arbitrary counter.
+    if "ContractVersion" in changed_versions:
         require(
-            "docs/COMPATIBILITY.md" in changed,
-            "embedded contract changed but docs/COMPATIBILITY.md was not updated",
+            embedded_contract_changed,
+            "ContractVersion changed but no embedded contract path or contract manifest changed",
             failures,
         )
         require(
-            any(path.startswith("internal/upgrader/") for path in changed),
-            "embedded contract changed but no upgrader implementation/test changed",
-            failures,
-        )
-        require(
-            any(path.startswith("internal/upgrader/testdata/") for path in changed),
-            "embedded contract changed but no frozen historical upgrader testdata changed",
+            contract_release_changed,
+            "ContractVersion changed but the contract release anchor did not advance",
             failures,
         )
 
-    if "schema/memory-item.schema.json" in changed:
-        base_schema = int_const(base_buildinfo, "SchemaVersion")
-        head_schema = int_const(head_buildinfo, "SchemaVersion")
+    # Schema version and schema bytes must move together. The schema is itself a
+    # contract path, so a real schema change is also subject to the contract gate.
+    schema_file_changed = SCHEMA_PATH in changed
+    if schema_file_changed:
         require(
-            head_schema != base_schema,
-            f"memory schema changed but SchemaVersion did not advance ({base_schema})",
+            "SchemaVersion" in changed_versions,
+            "memory schema changed but SchemaVersion did not advance "
+            f"({base_versions['SchemaVersion']})",
+            failures,
+        )
+    if "SchemaVersion" in changed_versions:
+        require(
+            schema_file_changed,
+            "SchemaVersion changed but schema/memory-item.schema.json did not change",
+            failures,
+        )
+
+    # Repository/index/trust-lock format changes alter how the operational
+    # contract is interpreted. Require corresponding normative contract bytes,
+    # which in turn trigger the contract-version/release checks above.
+    for name in ("RepositoryFormatVersion", "IndexFormatVersion", "TrustLockVersion"):
+        if name in changed_versions:
+            require(
+                embedded_contract_changed,
+                f"{name} changed but no embedded contract path or contract manifest changed",
+                failures,
+            )
+
+    # Moving the contract release anchor, changing contract semantics, or
+    # changing a compatibility dimension requires explicit compatibility and
+    # migration evidence. This deliberately does not trigger for a future
+    # runtime-only ReleaseVersion bump once ContractReleaseVersion is separate.
+    migration_evidence_required = bool(
+        embedded_contract_changed or contract_release_changed or changed_versions
+    )
+    if migration_evidence_required:
+        require(
+            compatibility_updated,
+            "compatibility/version state changed but docs/COMPATIBILITY.md was not updated",
+            failures,
+        )
+        require(
+            upgrader_code_or_test_changed,
+            "compatibility/version state changed but no upgrader implementation/test changed",
+            failures,
+        )
+        require(
+            historical_testdata_changed,
+            "compatibility/version state changed but no frozen historical upgrader testdata changed",
             failures,
         )
 
     print(f"impact guard: {len(changed)} changed file(s)")
-    if contract_changed:
+    if embedded_contract_changed:
         print("impact guard: embedded contract change detected")
         if contract_files_changed:
             for path in contract_files_changed:
                 print(f"  contract path: {path}")
         if contract_manifest_changed:
             print("  contract manifest: contract.go")
-        print(
-            "  contract version: "
-            f"{base_contract_version} -> {head_contract_version}; "
-            "contract release anchor: "
-            f"{base_contract_release} -> {head_contract_release}"
-        )
     else:
         print("impact guard: no embedded contract-path change detected")
         print(
             "impact guard: semantic contract review is still required for behavior changes "
             "in trust/validation/mutation/runtime code"
         )
+
+    if contract_release_changed:
+        print(
+            "impact guard: contract release anchor: "
+            f"{base_contract_release} -> {head_contract_release}"
+        )
+    for name in version_names:
+        if name in changed_versions:
+            print(
+                f"impact guard: {name}: "
+                f"{base_versions[name]} -> {head_versions[name]}"
+            )
 
     if failures:
         print("impact guard failed:", file=sys.stderr)
