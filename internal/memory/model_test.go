@@ -40,6 +40,7 @@ func encode(t *testing.T, value any) []byte {
 	}
 	return b
 }
+
 func problemContains(problems []SchemaProblem, needle string) bool {
 	for _, p := range problems {
 		if strings.Contains(p.Error(), needle) {
@@ -47,6 +48,13 @@ func problemContains(problems []SchemaProblem, needle string) bool {
 		}
 	}
 	return false
+}
+
+func symlinkOrSkip(t *testing.T, oldname, newname string) {
+	t.Helper()
+	if err := os.Symlink(oldname, newname); err != nil {
+		t.Skipf("symbolic links unavailable: %v", err)
+	}
 }
 
 func TestSchemaContractMatchesRepositorySchema(t *testing.T) {
@@ -131,5 +139,62 @@ func TestSchemaContractDetectsSemanticChange(t *testing.T) {
 	}
 	if err := ValidateSchemaContract(root); err == nil {
 		t.Fatal("expected schema contract mismatch")
+	}
+}
+
+func TestSchemaContractRejectsSymlinkedSchema(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "memory-item.schema.json")
+	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "memory-item.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outside, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	symlinkOrSkip(t, outside, filepath.Join(root, "schema", "memory-item.schema.json"))
+	if err := ValidateSchemaContract(root); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want symbolic-link rejection", err)
+	}
+}
+
+func TestDiscoverRejectsSymlinkedMemoriesRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	symlinkOrSkip(t, outside, filepath.Join(root, "memories"))
+	if _, _, err := Discover(root); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want symbolic-link rejection", err)
+	}
+}
+
+func TestDiscoverRejectsSymlinkedMemoryFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "memories", "projects", "test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, encode(t, validMemoryMap()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	symlinkOrSkip(t, outside, filepath.Join(dir, "linked--11111111.json"))
+	if _, _, err := Discover(root); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want symbolic-link rejection", err)
+	}
+}
+
+func TestLoadRejectsSymlinkedSidecar(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, encode(t, validMemoryMap()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "linked.json")
+	symlinkOrSkip(t, outside, link)
+	_, problems := Load(link)
+	if !problemContains(problems, "symbolic link") {
+		t.Fatalf("expected symbolic-link problem, got %+v", problems)
 	}
 }
