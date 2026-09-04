@@ -280,6 +280,7 @@ func renderProjects(root string) []byte {
 			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
 				b.WriteString("- " + item.label + ": `" + rel + "`\n")
 			}
+		}
 	}
 	return []byte(b.String())
 }
