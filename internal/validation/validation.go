@@ -227,6 +227,7 @@ func checkOpenLoopForm(status, text string, add func(string, string)) {
 				add("OPEN_LOOP_MARKDOWN_FORM", fmt.Sprintf("status %q requires heading %q", status, h))
 			}
 		}
+	}
 	forbid := func(names ...string) {
 		for _, h := range names {
 			if headings[h] {
