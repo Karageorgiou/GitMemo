@@ -1,9 +1,12 @@
 # Safety-critical Runethread surfaces. These owners become useful immediately
 # for review routing and can be made mandatory once a second maintainer exists.
 
+/.gitattributes @Karageorgiou
 /AGENTS.md @Karageorgiou
 /docs/runethread/ENGINEERING_PROCESS.md @Karageorgiou
+/docs/runethread/DEVELOPMENT_PIPELINE.md @Karageorgiou
 /docs/runethread/CURRENT_MILESTONE.md @Karageorgiou
+/.github/pull_request_template.md @Karageorgiou
 /.github/workflows/ @Karageorgiou
 /.github/dependabot.yml @Karageorgiou
 /.github/CODEOWNERS @Karageorgiou
