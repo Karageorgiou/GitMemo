@@ -436,16 +436,19 @@ A deliberate stop is a successful safety outcome, not a failure of progress.
 
 ---
 
-## 20. Current pre-Phase-3 application
+## 20. Current Phase 3 application
 
-Before Phase 3 MCP work begins, Runethread must resolve the runtime-release / contract-release coupling discovered after Phase 2.
+Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, and runtime-release / contract-release separation is now part of the current compatibility model.
 
-The introduction itself changes the semantics of the published v0.7 operational contract and therefore must be handled as a real contract migration rather than a retroactive reinterpretation. The replacement design must include:
+For Phase 3 MCP work:
 
-- an exact frozen v0.7 historical repository fixture;
-- explicit new contract semantics/version/release;
-- migration from exact trusted v0.7 state;
-- canonical-data preservation and rollback tests;
-- bootstrap/trust/validation wording aligned with implementation;
-- forward tests proving a later runtime-only release can use the unchanged contract without repository churn;
-- only after that, MCP/toolchain/dependency work on a fresh verified base.
+- start from a freshly verified current `main`, not a Phase 2.5 implementation branch;
+- re-check current authoritative MCP SDK/protocol and Go/toolchain requirements immediately before introducing dependencies;
+- implement MCP as a thin transport adapter over the existing MemoryService application boundary;
+- do not duplicate storage, lifecycle, provenance, trust, indexing, idempotency, concurrency, or Git transaction logic in the adapter;
+- preserve the CLI/native service path and provider independence;
+- treat MCP tool/request/result semantics as a public API surface and test compatibility/error behavior explicitly;
+- do not introduce a contract/schema/repository-format change merely to add transport unless normative repository behavior genuinely changes;
+- keep the separate Orchestrator and hosted/cloud work out of the first local MCP milestone unless independently approved.
+
+Any new evidence that changes repository semantics must still pass the normal contract and migration gates above rather than being smuggled into Phase 3 as an adapter detail.

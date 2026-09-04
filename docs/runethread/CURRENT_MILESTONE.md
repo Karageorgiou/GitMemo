@@ -8,34 +8,45 @@ This file is the concise current-work pointer for contributors and agents. The l
 
 - Phase 0 architecture is merged.
 - Phase 1 Runethread identity cutover is complete.
-- Phase 2 deterministic MemoryService is merged and released as v0.7.0.
-- `runethread/memory-template` and the known private memory repository have been repinned to v0.7.0 with canonical memory bytes preserved and post-migration validation passing.
+- Phase 2 deterministic MemoryService is merged and released.
+- Phase 2.5 compatibility hardening is complete and issue #14 is closed.
+- Runethread v0.8.0 is the current immutable release and introduces contract version 8 plus explicit runtime-release / contract-release separation.
+- `runethread/memory-template` is migrated to contract v8 / v0.8.0 and passes permanent bootstrap validation.
+- The known private `runethread-memory` repository is migrated to contract v8 / v0.8.0 with canonical memory, project, schema, template, and Index v2 bytes preserved where the migration contract required preservation.
 
-## Immediate milestone — Phase 2.5 compatibility hardening
+## Immediate milestone — Phase 3 local MCP adapter
 
-Phase 3 MCP **must not start yet**.
+Phase 3 may now begin from a freshly verified `main`.
 
-The current blocker is release-pin coupling discovered after Phase 2. Published v0.7 uses one release identity for both the running executable and the immutable repository operational contract. A superseded exploratory PR (#13) attempted to separate them without a contract change; review proved that would reinterpret published v0.7 normative semantics.
+The goal is a thin local MCP transport over the already-implemented deterministic MemoryService, not a second implementation of memory behavior.
 
-The replacement work is tracked by issue #14:
+Before the first Phase 3 implementation write:
 
-> Introduce runtime-release / contract-release separation through an explicit new contract migration, with an exact frozen v0.7 fixture and forward tests proving later runtime-only releases can advance without repository churn.
+1. verify current `main`, current release, and permanent CI state;
+2. re-check current authoritative MCP and Go SDK/toolchain requirements rather than relying on older research;
+3. define the smallest MCP tool surface that maps cleanly to existing MemoryService operations;
+4. keep storage, lifecycle, provenance, trust, indexing, idempotency, concurrency, and Git transaction rules inside Core rather than duplicating them in the adapter;
+5. preserve CLI/native behavior and provider independence;
+6. classify any proposed protocol/API/dependency change through the normal engineering-process gates before implementation.
 
-Required high-level order:
+Expected MemoryService-facing operations remain conceptually:
 
-1. merge engineering-process hardening;
-2. start Phase 2.5 from freshly verified `main`;
-3. audit published v0.7 contract/bootstrap/compatibility semantics;
-4. freeze exact v0.7 historical repository fixture;
-5. design and implement the explicit new contract transition and migration;
-6. release and independently verify it;
-7. migrate/verify public template, then private memory repository;
-8. only after Phase 2.5 closes, re-evaluate current Go/MCP SDK requirements and begin Phase 3 on a fresh branch.
+```text
+Search
+Get
+PrepareMutation
+ApplyMutation
+Withdraw
+Status
+```
+
+The first MCP milestone does not include the separate Runethread Orchestrator, hosted cloud infrastructure, worker routing, or unrelated repository-format/schema/contract changes unless new evidence independently requires them.
 
 ## Engineering procedure
 
 All substantive changes follow `docs/runethread/ENGINEERING_PROCESS.md` and the repository PR checklist. Validation CI is read-only and must never patch/push source.
 
-## Known superseded work
+## Historical / superseded work
 
-PR #13 (`superseded: decouple runtime and contract releases`) is intentionally closed and retained only as design-forensics history. Do not merge, revive, or use it as an implementation base.
+- PR #13 (`superseded: decouple runtime and contract releases`) remains closed as design-forensics history and must not be revived or used as an implementation base.
+- Phase 2.5 design and completion evidence remain recorded in issue #14 and ADR-011.
