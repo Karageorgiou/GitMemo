@@ -3,7 +3,6 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -171,14 +170,14 @@ func checkFilenameAndPath(root string, r memory.Record, issues *[]Issue) {
 	relPath, err := filepath.Rel(root, resolved)
 	if err != nil || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
 		add("CONTENT_PATH_ESCAPE", r.Path, "content_path escapes repository root")
-	} else if _, err := os.Stat(resolved); err != nil {
-		add("CONTENT_PATH_MISSING", r.Path, "content_path does not resolve to a file")
+	} else if err := requireContentPathFile(root, r.Memory.ContentPath); err != nil {
+		add("CONTENT_PATH_MISSING", r.Path, "content_path does not resolve to a regular repository file")
 	}
 }
 
 func checkMarkdown(root string, r memory.Record, issues *[]Issue) {
 	path := strings.TrimSuffix(r.Path, ".json") + ".md"
-	data, err := os.ReadFile(path)
+	data, err := readMarkdownFile(root, path)
 	if err != nil {
 		return
 	}
@@ -226,7 +225,6 @@ func checkOpenLoopForm(status, text string, add func(string, string)) {
 			if !headings[h] {
 				add("OPEN_LOOP_MARKDOWN_FORM", fmt.Sprintf("status %q requires heading %q", status, h))
 			}
-		}
 	}
 	forbid := func(names ...string) {
 		for _, h := range names {
