@@ -25,13 +25,16 @@ jobs:
       - name: Verify module content
         run: go mod verify
 
+      - name: Test PR impact guard
+        run: |
+          python3 -m py_compile scripts/check-pr-impact.py scripts/check_pr_impact_test.py
+          python3 scripts/check_pr_impact_test.py
+
       - name: Validate PR impact/versioning invariants
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          python3 -m py_compile scripts/check-pr-impact.py
-          python3 scripts/check-pr-impact.py "$BASE_SHA"
+        run: python3 scripts/check-pr-impact.py "$BASE_SHA"
 
       - name: Run tests
         run: go test ./...
