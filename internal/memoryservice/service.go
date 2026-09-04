@@ -272,7 +272,7 @@ func (s *Service) getCanonical(id string) (Document, bool, error) {
 		return doc, true, nil
 	}
 
-	records, err := memory.LoadAll(s.root)
+	records, err := loadCanonicalRecords(s.root)
 	if err != nil {
 		return Document{}, false, errorf(CodeRepositoryInvalid, "get", err, "load canonical memories: %v", err)
 	}
@@ -301,6 +301,9 @@ func (s *Service) getCanonical(id string) (Document, bool, error) {
 }
 
 func loadDocument(root, sidecarRel string) (Document, error) {
+	if buildinfo.ContractVersion >= 8 {
+		return loadDocumentStrict(root, sidecarRel)
+	}
 	sidecarRel = filepath.ToSlash(filepath.Clean(filepath.FromSlash(sidecarRel)))
 	sidecarPath := filepath.Join(root, filepath.FromSlash(sidecarRel))
 	m, problems := memory.Load(sidecarPath)
