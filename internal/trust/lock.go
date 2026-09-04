@@ -15,6 +15,7 @@ import (
 
 	runethread "github.com/runethread/core"
 	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/fsafety"
 )
 
 var stableVersionRE = regexp.MustCompile(`^v([0-9]+)\.([0-9]+)\.([0-9]+)$`)
@@ -43,7 +44,7 @@ type repositoryConfig struct {
 }
 
 // ExpectedLock builds the trust lock for the operational contract embedded in
-// the running Runethread release.
+// the running Runethread runtime.
 func ExpectedLock() (Lock, error) {
 	files := make(map[string]string, len(runethread.ContractPaths()))
 	for _, rel := range runethread.ContractPaths() {
@@ -56,7 +57,7 @@ func ExpectedLock() (Lock, error) {
 	return Lock{
 		LockVersion:       buildinfo.TrustLockVersion,
 		SourceRepository:  buildinfo.SourceRepository,
-		RunethreadVersion: buildinfo.ReleaseVersion,
+		RunethreadVersion: buildinfo.ContractReleaseVersion,
 		RepositoryFormat:  buildinfo.RepositoryFormatVersion,
 		SchemaVersion:     buildinfo.SchemaVersion,
 		ContractVersion:   buildinfo.ContractVersion,
@@ -78,12 +79,12 @@ func JSON() ([]byte, error) {
 }
 
 // ReadPinnedVersion is intentionally forward-tolerant. The stable validation
-// bootstrap only needs the lock envelope version and pinned Runethread release.
+// bootstrap only needs the lock envelope version and pinned contract release.
 // Future lock files may add fields without requiring the bootstrap itself to
 // change.
 func ReadPinnedVersion(root string) (string, error) {
-	path := filepath.Join(root, buildinfo.ManagedMetadataDir, "lock.json")
-	data, err := os.ReadFile(path)
+	lockRel := buildinfo.ManagedMetadataDir + "/lock.json"
+	data, err := readRepositoryFile(root, lockRel)
 	if err != nil {
 		return "", fmt.Errorf("read trust lock: %w", err)
 	}
@@ -104,7 +105,7 @@ func ReadPinnedVersion(root string) (string, error) {
 }
 
 // Check verifies that the repository's lock, config, and vendored control-plane
-// files exactly match the contract embedded in the running release.
+// files exactly match the contract embedded in the running runtime.
 func Check(root string) []Problem {
 	expected, err := ExpectedLock()
 	lockRel := buildinfo.ManagedMetadataDir + "/lock.json"
@@ -112,8 +113,7 @@ func Check(root string) []Problem {
 		return []Problem{{Path: lockRel, Message: err.Error()}}
 	}
 
-	lockPath := filepath.Join(root, buildinfo.ManagedMetadataDir, "lock.json")
-	data, err := os.ReadFile(lockPath)
+	data, err := readRepositoryFile(root, lockRel)
 	if err != nil {
 		return []Problem{{Path: lockRel, Message: fmt.Sprintf("read trust lock: %v", err)}}
 	}
@@ -129,13 +129,13 @@ func Check(root string) []Problem {
 		problems = append(problems, Problem{Path: lockRel, Message: message})
 	}
 	if actual.LockVersion != expected.LockVersion {
-		addLock(fmt.Sprintf("lock_version is %d, expected %d for %s", actual.LockVersion, expected.LockVersion, buildinfo.ReleaseVersion))
+		addLock(fmt.Sprintf("lock_version is %d, expected %d for contract release %s", actual.LockVersion, expected.LockVersion, buildinfo.ContractReleaseVersion))
 	}
 	if actual.SourceRepository != expected.SourceRepository {
 		addLock(fmt.Sprintf("source_repository is %q, expected %q", actual.SourceRepository, expected.SourceRepository))
 	}
 	if actual.RunethreadVersion != expected.RunethreadVersion {
-		addLock(fmt.Sprintf("runethread_version is %q, but running validator is %q", actual.RunethreadVersion, expected.RunethreadVersion))
+		addLock(fmt.Sprintf("runethread_version is %q, but embedded contract release is %q", actual.RunethreadVersion, expected.RunethreadVersion))
 	}
 	if actual.RepositoryFormat != expected.RepositoryFormat || actual.SchemaVersion != expected.SchemaVersion || actual.ContractVersion != expected.ContractVersion {
 		addLock(fmt.Sprintf("repository/schema/contract versions are %d/%d/%d, expected %d/%d/%d", actual.RepositoryFormat, actual.SchemaVersion, actual.ContractVersion, expected.RepositoryFormat, expected.SchemaVersion, expected.ContractVersion))
@@ -158,13 +158,13 @@ func Check(root string) []Problem {
 			addLock(fmt.Sprintf("locked digest for %s is %s, expected %s", rel, lockedHash, expectedHash))
 			continue
 		}
-		local, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		local, readErr := readRepositoryFile(root, rel)
 		if readErr != nil {
 			problems = append(problems, Problem{Path: rel, Message: fmt.Sprintf("read control-plane file: %v", readErr)})
 			continue
 		}
 		if localHash := sha256Hex(local); localHash != expectedHash {
-			problems = append(problems, Problem{Path: rel, Message: fmt.Sprintf("control-plane digest is %s, expected %s from pinned release %s", localHash, expectedHash, expected.RunethreadVersion)})
+			problems = append(problems, Problem{Path: rel, Message: fmt.Sprintf("control-plane digest is %s, expected %s from pinned contract release %s", localHash, expectedHash, expected.RunethreadVersion)})
 		}
 	}
 	for rel := range actual.FilesSHA256 {
@@ -179,8 +179,7 @@ func Check(root string) []Problem {
 
 func checkConfig(root string, expected Lock) []Problem {
 	rel := buildinfo.ManagedMetadataDir + "/config.json"
-	path := filepath.Join(root, buildinfo.ManagedMetadataDir, "config.json")
-	data, err := os.ReadFile(path)
+	data, err := readRepositoryFile(root, rel)
 	if err != nil {
 		return []Problem{{Path: rel, Message: fmt.Sprintf("read repository config: %v", err)}}
 	}
@@ -194,6 +193,13 @@ func checkConfig(root string, expected Lock) []Problem {
 		return []Problem{{Path: rel, Message: fmt.Sprintf("config pins %d/%d/%d/%s, expected %d/%d/%d/%s", cfg.RepositoryFormat, cfg.SchemaVersion, cfg.ContractVersion, cfg.RunethreadVersion, expected.RepositoryFormat, expected.SchemaVersion, expected.ContractVersion, expected.RunethreadVersion)}}
 	}
 	return nil
+}
+
+func readRepositoryFile(root, rel string) ([]byte, error) {
+	if buildinfo.ContractVersion >= 8 {
+		return fsafety.ReadRegularFileUnder(root, rel)
+	}
+	return os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 }
 
 func aggregateDigest(files map[string]string) string {

@@ -14,11 +14,11 @@ Future official Runethread releases SHOULD retain tested migrations from support
 
 “Create a new repository and start over” is not an acceptable normal migration strategy for durable user memory.
 
-## One predecessor bridge in v0.6.0
+## Historical predecessor bridge
 
-Runethread v0.6.0 has one finite pre-native migration path: the exact trusted GitMemo v0.5.0 state with repository format 1, schema 1, contract 6, and trust lock 1.
+Runethread retains one finite pre-native migration path: the exact trusted GitMemo v0.5.0 state with repository format 1, schema 1, contract 6, and trust lock 1.
 
-That bridge is intentionally narrow. The upgrader verifies the legacy config, lock metadata, aggregate/per-file control-plane hashes, and managed validation workflow before writing native state. Unknown, mixed, customized, or tampered `.gitmemo` state is refused rather than guessed.
+That bridge is intentionally narrow. The upgrader verifies the legacy config, lock metadata, aggregate/per-file control-plane hashes, managed validation workflow, and applicable filesystem-object safety before writing native state. Unknown, mixed, customized, newer-unknown, or tampered `.gitmemo` state is refused rather than guessed.
 
 This is a migration compatibility rule, not a permanent GitMemo compatibility layer. Native Runethread uses `.runethread/`, `runethread` commands, `runethread_version`, and `runethread/core` as its source authority.
 
@@ -26,7 +26,8 @@ This is a migration compatibility rule, not a permanent GitMemo compatibility la
 
 Runethread tracks separate compatibility dimensions:
 
-- **release version** — implementation/distribution version;
+- **runtime release version** — implementation/distribution version of the executable;
+- **contract release version** — immutable official release that owns the embedded operational repository contract;
 - **repository format version** — repository-level layout/protocol generation;
 - **schema version** — atomic memory data shape;
 - **contract version** — operational semantics for LLMs and tooling;
@@ -34,13 +35,35 @@ Runethread tracks separate compatibility dimensions:
 - **trust lock version** — envelope used to pin and verify the control plane;
 - **bootstrap protocol version** — machine-readable onboarding manifest contract.
 
-A release change does not imply every dimension changes.
+A runtime release change does not imply a contract change, and a contract change does not imply every other compatibility dimension changes.
+
+Runethread v0.8.0 introduces the explicit runtime/contract-release split through contract version 8. Under contract v8, `.runethread/config.json` and `.runethread/lock.json` retain the existing `runethread_version` field, but that field is the **contract release anchor**. Historical contract-v7 repositories keep their published v7 meaning until they are explicitly migrated.
+
+The v0.8.0 transition keeps repository format 2, schema 1, index format 2, trust-lock version 2, bootstrap protocol 1, and bootstrap verifier v0.6.0 unchanged while advancing contract version from 7 to 8.
 
 ## Pinning
 
-A memory repository remains pinned to its installed official Runethread release until an explicit supported upgrade occurs. Mutable public `main` is not an implicit upgrade channel.
+A memory repository is pinned to its installed official **contract release** until an explicit supported contract upgrade occurs. Mutable public `main` is not an implicit upgrade channel.
 
-Native release and contract digests are recorded in `.runethread/lock.json`.
+The runtime executing against that repository may be newer than the pinned contract release when the runtime explicitly embeds and supports that exact contract and all compatibility dimensions/digests match. In that case, a runtime-only release MUST NOT require repository churn, lock rewriting, or a memory-repository commit merely to record the newer executable version.
+
+Conversely, a repository MUST NOT be repinned to a newer runtime release when that runtime still embeds an older contract release. A genuine future contract change requires an explicit migration.
+
+The contract-release identity and contract digests are recorded in `.runethread/lock.json`; runtime release identity is reported separately by the executable/service status surface.
+
+## Historical native source anchors
+
+Contract migrations are accepted only from explicitly supported exact source states. For the contract-v8 transition, Runethread preserves exact native v0.6.0 and v0.7.0 / contract-v7 source anchors rather than synthesizing historical state from the current generator.
+
+Historical fixture material may reuse a current embedded contract byte only when its SHA-256 exactly matches the historical trusted lock for that path. Otherwise the historical byte must be frozen explicitly. Source tampering, mixed managed metadata, unsupported versions, or newer unknown states are refused before migration writes.
+
+## Filesystem-object compatibility boundary
+
+Contract v8 makes authoritative repository filesystem objects fail-closed. Repository-owned canonical/control-plane/index-source paths must use real directories and regular files as specified by the trust and repository-validation contracts. Symbolic links and unsupported special filesystem objects are rejected rather than followed for authoritative inputs.
+
+Migration source verification establishes those conditions before writes. Rollback snapshots operate on regular managed files and must not dereference a symbolic link and later restore copied target bytes in its place.
+
+Freshly initialized v8 memory repositories also include a managed root `.gitattributes` support file for byte-stable LF text checkouts. `.gitattributes` is repository/bootstrap support rather than a `ContractPaths()` member or trust-lock digest. A v7 -> v8 migration may create it when absent, accepts the exact managed bytes when already present, and refuses to overwrite a conflicting custom file.
 
 ## Migration design
 
@@ -66,7 +89,9 @@ For each supported historical source state, the repository SHOULD keep represent
 supported old fixture -> current upgrader -> current validation
 ```
 
-The v0.6.0 suite includes an exact historical v0.5.0 control-plane fixture and tests successful migration, source-tamper refusal, mixed-state refusal, custom-workflow refusal, idempotent native operation, and rollback after post-write validation failure.
+The suite protects successful historical migration, source-tamper refusal, mixed-state refusal, custom-workflow/support-file ownership, idempotent current-native operation, and rollback after post-write validation failure.
+
+For runtime/contract-release separation, regression coverage must also prove a deliberately newer runtime can accept the unchanged pinned contract release without repository churn, while rejecting a repository incorrectly pinned to the newer runtime when no new contract exists.
 
 ## Rollback and failure
 

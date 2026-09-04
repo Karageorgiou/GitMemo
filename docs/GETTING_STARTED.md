@@ -47,7 +47,7 @@ runethread init .
 
 `runethread init` refuses to overwrite a non-empty directory; a directory containing only `.git` is allowed.
 
-A native repository contains:
+A native contract-v8 repository contains:
 
 - `MEMORY_PROTOCOL.md` — mandatory operating rules;
 - `docs/USER_COMMANDS.md` — the `store/search` contract;
@@ -58,8 +58,11 @@ A native repository contains:
 - `projects/` — concise project state views;
 - `index/` — generated retrieval acceleration;
 - `.runethread/config.json` — compatibility/version metadata;
-- `.runethread/lock.json` — immutable release pin and control-plane digests;
+- `.runethread/lock.json` — immutable contract-release pin and control-plane digests;
+- `.gitattributes` — managed LF text policy for byte-stable Git checkouts;
 - `.github/workflows/validate.yml` — read-only trust/bootstrap validation workflow.
+
+Under contract v8, `runethread_version` in config/lock identifies the **contract release**. It does not have to equal the version of a newer compatible runtime executing against the repository.
 
 ## 3. Create a private remote
 
@@ -121,28 +124,37 @@ Adding a core memory `type` is different because it changes semantic behavior an
 
 ## 7. Upgrade or migrate a repository
 
-Native repositories remain pinned until an explicit upgrade:
+Native repositories remain pinned to their installed contract release until an explicit contract upgrade:
 
 ```bash
 runethread upgrade .
 ```
 
-Runethread v0.6.0 additionally recognizes exactly one trusted predecessor state: GitMemo v0.5.0 / format 1 / schema 1 / contract 6 / lock 1. That cutover is verified before any native files are written.
+A newer runtime-only release that embeds the same contract does not require running `upgrade`, rewriting `.runethread`, or committing a repository repin merely to record the runtime version.
 
-The v0.6 upgrader:
+Runethread v0.8.0 / contract 8 explicitly supports exact historical native v0.6.0 and v0.7.0 contract-v7 source anchors, plus the deliberately narrow exact trusted GitMemo v0.5.0 predecessor state. Historical source state is verified before current managed files are written.
+
+The current upgrader:
 
 1. detects native versus supported legacy metadata and refuses mixed state;
-2. verifies the exact supported source state;
-3. snapshots managed/generated paths;
-4. writes native `.runethread` metadata and pinned contract;
-5. preserves canonical `memories/`, `projects/`, and unrelated user files;
-6. rebuilds Index v2;
-7. validates the resulting repository; and
-8. restores the snapshot on a hard post-write failure.
+2. verifies an exact supported source anchor, including managed filesystem-object safety;
+3. refuses conflicting custom managed support such as a non-matching `.gitattributes`;
+4. snapshots only managed/generated regular-file paths needed for rollback;
+5. writes current `.runethread` metadata and pinned contract release;
+6. preserves canonical `memories/`, `projects/`, and unrelated user files;
+7. rebuilds Index v2;
+8. validates the resulting repository; and
+9. restores the snapshot on a hard post-write failure.
 
-A custom validation workflow is not overwritten silently.
+A custom validation workflow or conflicting Git attributes file is not overwritten silently.
 
-## 8. Index freshness and validation
+## 8. Filesystem-object integrity
+
+Contract v8 rejects symbolic links and unsupported special filesystem objects when they are used as repository-owned canonical/control-plane/index-source authority. Authoritative directories must be real directories and authoritative files must be regular files; traversal and volume escapes are invalid.
+
+This is separate from content hashing: a symbolic link pointing at bytes that happen to match a trusted file is still not a valid authoritative repository object.
+
+## 9. Index freshness and validation
 
 ```bash
 runethread index --check .
@@ -163,7 +175,7 @@ If a write-capable client cannot run the indexer, preserve or create the standar
 runethread index --mark-stale .
 ```
 
-A stale index is degraded discovery, not loss of canonical memory. Use repository search/canonical sidecars until deterministic regeneration succeeds.
+A stale index is degraded discovery, not loss of canonical memory. Use repository search/valid canonical sidecars until deterministic regeneration succeeds. Unsafe authoritative filesystem objects are integrity errors, not ordinary index staleness.
 
 ## Privacy and security
 

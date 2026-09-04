@@ -3,7 +3,6 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -45,10 +44,10 @@ func Validate(root string) []Issue {
 		add("TRUST_LOCK", filepath.Join(root, filepath.FromSlash(problem.Path)), problem.Message)
 	}
 
-	if err := memory.ValidateSchemaContract(root); err != nil {
+	if err := validateSchemaContractForRepository(root); err != nil {
 		add("SCHEMA_CONTRACT", filepath.Join(root, "schema", "memory-item.schema.json"), err.Error())
 	}
-	sidecars, markdown, err := memory.Discover(root)
+	sidecars, markdown, err := discoverMemoryFiles(root)
 	if err != nil {
 		add("DISCOVERY", filepath.Join(root, "memories"), err.Error())
 		return sortIssues(issues)
@@ -76,7 +75,7 @@ func Validate(root string) []Issue {
 	records := make([]memory.Record, 0, len(sidecars))
 	byID := map[string][]memory.Record{}
 	for _, p := range sidecars {
-		m, problems := memory.Load(p)
+		m, problems := loadMemorySidecar(root, p)
 		if len(problems) > 0 {
 			for _, problem := range problems {
 				add("SCHEMA", p, problem.Error())
@@ -171,14 +170,14 @@ func checkFilenameAndPath(root string, r memory.Record, issues *[]Issue) {
 	relPath, err := filepath.Rel(root, resolved)
 	if err != nil || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
 		add("CONTENT_PATH_ESCAPE", r.Path, "content_path escapes repository root")
-	} else if _, err := os.Stat(resolved); err != nil {
-		add("CONTENT_PATH_MISSING", r.Path, "content_path does not resolve to a file")
+	} else if err := requireContentPathFile(root, r.Memory.ContentPath); err != nil {
+		add("CONTENT_PATH_MISSING", r.Path, "content_path does not resolve to a regular repository file")
 	}
 }
 
 func checkMarkdown(root string, r memory.Record, issues *[]Issue) {
 	path := strings.TrimSuffix(r.Path, ".json") + ".md"
-	data, err := os.ReadFile(path)
+	data, err := readMarkdownFile(root, path)
 	if err != nil {
 		return
 	}

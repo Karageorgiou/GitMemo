@@ -87,14 +87,22 @@ type snapshot struct {
 }
 
 // Apply upgrades a supported memory repository to the Runethread contract
-// embedded in the running binary. Native Runethread repositories are updated in
-// place. Runethread v0.7.0 accepts the exact trusted v0.6.0 native state and the
-// exact trusted GitMemo v0.5.0 format-1 predecessor state. User memories and
-// project data are never rewritten by this operation.
+// embedded in the running binary. User memories and project data are never
+// rewritten by this operation.
 func Apply(root string) (Result, error) {
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireMigrationRoot(root); err != nil {
+			return Result{}, err
+		}
+	}
 	state, err := inspectSource(root)
 	if err != nil {
 		return Result{}, err
+	}
+	if buildinfo.ContractVersion >= 8 {
+		if err := checkManagedGitAttributesOwnership(root); err != nil {
+			return Result{}, err
+		}
 	}
 	if err := checkWorkflowOwnership(root, state.Kind); err != nil {
 		return Result{}, err
@@ -130,7 +138,12 @@ func Apply(root string) (Result, error) {
 	}
 	tracked := sortedSet(trackedSet)
 
-	snapshots, err := takeSnapshots(root, tracked)
+	var snapshots map[string]snapshot
+	if buildinfo.ContractVersion >= 8 {
+		snapshots, err = takeRegularSnapshots(root, tracked)
+	} else {
+		snapshots, err = takeSnapshots(root, tracked)
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -187,7 +200,13 @@ func Apply(root string) (Result, error) {
 	}
 	for _, rel := range sortedSet(indexUnion) {
 		old := snapshots[rel]
-		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		var data []byte
+		var readErr error
+		if buildinfo.ContractVersion >= 8 {
+			data, readErr = readRepositoryRegularFile(root, rel)
+		} else {
+			data, readErr = os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		}
 		if os.IsNotExist(readErr) {
 			if old.exists {
 				changed = append(changed, rel)
@@ -213,7 +232,7 @@ func Apply(root string) (Result, error) {
 	sort.Strings(changed)
 	return Result{
 		FromVersion:    state.Version,
-		ToVersion:      buildinfo.ReleaseVersion,
+		ToVersion:      buildinfo.ContractReleaseVersion,
 		FromContract:   state.ContractVersion,
 		ToContract:     buildinfo.ContractVersion,
 		ChangedPaths:   unique(changed),
@@ -258,8 +277,13 @@ func inspectSource(root string) (sourceState, error) {
 }
 
 func readNativeConfig(root string) (repositoryConfig, error) {
-	path := filepath.Join(root, buildinfo.ManagedMetadataDir, "config.json")
-	data, err := os.ReadFile(path)
+	var data []byte
+	var err error
+	if buildinfo.ContractVersion >= 8 {
+		data, err = readRepositoryRegularFile(root, buildinfo.ManagedMetadataDir+"/config.json")
+	} else {
+		data, err = os.ReadFile(filepath.Join(root, buildinfo.ManagedMetadataDir, "config.json"))
+	}
 	if err != nil {
 		return repositoryConfig{}, fmt.Errorf("read Runethread repository config: %w", err)
 	}
@@ -273,29 +297,16 @@ func readNativeConfig(root string) (repositoryConfig, error) {
 }
 
 func checkNativeCompatibility(cfg repositoryConfig) error {
-	if cfg.RepositoryFormat != buildinfo.RepositoryFormatVersion {
-		return fmt.Errorf("repository format %d is not supported by %s (supports %d)", cfg.RepositoryFormat, buildinfo.ReleaseVersion, buildinfo.RepositoryFormatVersion)
-	}
-	if cfg.SchemaVersion != buildinfo.SchemaVersion {
-		if cfg.SchemaVersion > buildinfo.SchemaVersion {
-			return fmt.Errorf("repository schema version %d is newer than %s supports (%d)", cfg.SchemaVersion, buildinfo.ReleaseVersion, buildinfo.SchemaVersion)
-		}
-		return fmt.Errorf("no Runethread schema migration from version %d to %d is implemented", cfg.SchemaVersion, buildinfo.SchemaVersion)
-	}
-	if cfg.ContractVersion != buildinfo.ContractVersion {
-		if cfg.ContractVersion > buildinfo.ContractVersion {
-			return fmt.Errorf("repository contract version %d is newer than %s supports (%d)", cfg.ContractVersion, buildinfo.ReleaseVersion, buildinfo.ContractVersion)
-		}
-		return fmt.Errorf("no native Runethread contract migration from version %d to %d is implemented", cfg.ContractVersion, buildinfo.ContractVersion)
-	}
-	if cfg.RunethreadVersion != buildinfo.ReleaseVersion && cfg.RunethreadVersion != previousNativeReleaseVersion {
-		return fmt.Errorf("repository pins Runethread %q; %s only upgrades exact trusted %s or %s native state, or trusted GitMemo v0.5.0", cfg.RunethreadVersion, buildinfo.ReleaseVersion, previousNativeReleaseVersion, buildinfo.ReleaseVersion)
-	}
-	return nil
+	return checkNativeCompatibilityForTarget(cfg, currentNativeCompatibilityTarget())
 }
 
 func verifyLegacyV050Source(root string) error {
 	dir := filepath.Join(root, legacyManagedMetadataDir)
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireRepositoryDirectory(root, legacyManagedMetadataDir); err != nil {
+			return err
+		}
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("read legacy managed metadata: %w", err)
@@ -304,7 +315,7 @@ func verifyLegacyV050Source(root string) error {
 		return fmt.Errorf("legacy %s directory is not the exact supported v0.5.0 layout", legacyManagedMetadataDir)
 	}
 
-	configData, err := readRegularFile(filepath.Join(dir, "config.json"))
+	configData, err := readLegacySourceFile(root, legacyManagedMetadataDir+"/config.json")
 	if err != nil {
 		return fmt.Errorf("read legacy repository config: %w", err)
 	}
@@ -318,7 +329,7 @@ func verifyLegacyV050Source(root string) error {
 		return fmt.Errorf("legacy repository config is not the supported GitMemo v0.5.0 source state")
 	}
 
-	lockData, err := readRegularFile(filepath.Join(dir, "lock.json"))
+	lockData, err := readLegacySourceFile(root, legacyManagedMetadataDir+"/lock.json")
 	if err != nil {
 		return fmt.Errorf("read legacy trust lock: %w", err)
 	}
@@ -335,7 +346,7 @@ func verifyLegacyV050Source(root string) error {
 		return fmt.Errorf("legacy trust lock contract digest does not match the supported GitMemo v0.5.0 contract")
 	}
 	for _, rel := range sortedStringMapKeys(lock.FilesSHA256) {
-		data, err := readRegularFile(filepath.Join(root, filepath.FromSlash(rel)))
+		data, err := readLegacySourceFile(root, rel)
 		if err != nil {
 			return fmt.Errorf("verify legacy control-plane file %s: %w", rel, err)
 		}
@@ -346,8 +357,15 @@ func verifyLegacyV050Source(root string) error {
 	return nil
 }
 
+func readLegacySourceFile(root, rel string) ([]byte, error) {
+	if buildinfo.ContractVersion >= 8 {
+		return readRepositoryRegularFile(root, rel)
+	}
+	return readRegularFile(filepath.Join(root, filepath.FromSlash(rel)))
+}
+
 func desiredManagedFiles(root string, kind sourceKind) (map[string][]byte, error) {
-	desired := make(map[string][]byte, len(runethread.ContractPaths())+4)
+	desired := make(map[string][]byte, len(runethread.ContractPaths())+5)
 	for _, rel := range runethread.ContractPaths() {
 		data, err := fs.ReadFile(runethread.ContractFS, rel)
 		if err != nil {
@@ -366,15 +384,29 @@ func desiredManagedFiles(root string, kind sourceKind) (map[string][]byte, error
 	}
 	desired[buildinfo.ManagedMetadataDir+"/lock.json"] = lock
 	desired[".github/workflows/validate.yml"] = starter.ValidationWorkflow()
+	if buildinfo.ContractVersion >= 8 {
+		desired[managedGitAttributesPath] = starter.GitAttributes()
+	}
 
-	readmePath := filepath.Join(root, "README.md")
-	if data, err := os.ReadFile(readmePath); err == nil {
-		updated := updateReadme(data, kind)
-		if !bytes.Equal(data, updated) {
-			desired["README.md"] = updated
+	if buildinfo.ContractVersion >= 8 {
+		if data, exists, err := readOptionalRepositoryRegularFile(root, "README.md"); err != nil {
+			return nil, fmt.Errorf("read README.md: %w", err)
+		} else if exists {
+			updated := updateReadme(data, kind)
+			if !bytes.Equal(data, updated) {
+				desired["README.md"] = updated
+			}
 		}
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read README.md: %w", err)
+	} else {
+		readmePath := filepath.Join(root, "README.md")
+		if data, err := os.ReadFile(readmePath); err == nil {
+			updated := updateReadme(data, kind)
+			if !bytes.Equal(data, updated) {
+				desired["README.md"] = updated
+			}
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("read README.md: %w", err)
+		}
 	}
 	return desired, nil
 }
@@ -406,13 +438,27 @@ func obsoleteManagedPaths(kind sourceKind) []string {
 }
 
 func checkWorkflowOwnership(root string, kind sourceKind) error {
-	path := filepath.Join(root, ".github", "workflows", "validate.yml")
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read validation workflow: %w", err)
+	var data []byte
+	if buildinfo.ContractVersion >= 8 {
+		var exists bool
+		var err error
+		data, exists, err = readOptionalRepositoryRegularFile(root, ".github/workflows/validate.yml")
+		if err != nil {
+			return fmt.Errorf("read validation workflow: %w", err)
+		}
+		if !exists {
+			return nil
+		}
+	} else {
+		path := filepath.Join(root, ".github", "workflows", "validate.yml")
+		var err error
+		data, err = os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read validation workflow: %w", err)
+		}
 	}
 	switch kind {
 	case sourceNative:
@@ -434,8 +480,17 @@ func verifyTargetMetadata(root string) error {
 		return fmt.Errorf("legacy managed metadata %s remains after migration", legacyManagedMetadataDir)
 	}
 	for _, rel := range []string{buildinfo.ManagedMetadataDir + "/config.json", buildinfo.ManagedMetadataDir + "/lock.json"} {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+		if buildinfo.ContractVersion >= 8 {
+			if _, err := readRepositoryRegularFile(root, rel); err != nil {
+				return fmt.Errorf("target managed path %s is missing or unsafe: %w", rel, err)
+			}
+		} else if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
 			return fmt.Errorf("target managed path %s is missing: %w", rel, err)
+		}
+	}
+	if buildinfo.ContractVersion >= 8 {
+		if err := checkManagedGitAttributesOwnership(root); err != nil {
+			return err
 		}
 	}
 	return nil

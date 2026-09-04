@@ -2,7 +2,7 @@
 
 Runethread uses Architecture Decision Records (ADRs) for durable architectural choices that affect compatibility, trust, security, state ownership, or component boundaries.
 
-The Phase 0 architecture documents describe the target system. The decisions below were reviewed and accepted before implementation begins.
+The architecture documents describe the target system. Accepted decisions govern implementation until they are explicitly superseded.
 
 ## Status values
 
@@ -11,7 +11,7 @@ The Phase 0 architecture documents describe the target system. The decisions bel
 - **Superseded** — replaced by a newer ADR that explains why.
 - **Rejected** — considered and intentionally not adopted.
 
-## Phase 0 decision catalog
+## Decision catalog
 
 | ADR | Decision | Status |
 | --- | --- | --- |
@@ -25,6 +25,7 @@ The Phase 0 architecture documents describe the target system. The decisions bel
 | [ADR-008](ADR-008-permissions-and-approvals.md) | Least-privilege permission and approval model | Accepted |
 | [ADR-009](ADR-009-controlled-runethread-cutover.md) | Controlled GitMemo-to-Runethread cutover | Accepted |
 | [ADR-010](ADR-010-organization-repository-topology.md) | Runethread organization and repository topology | Accepted |
+| [ADR-011](ADR-011-runtime-contract-release-separation.md) | Runtime and contract release separation | Accepted |
 
 ## ADR format
 
@@ -57,4 +58,4 @@ How can implementation/tests demonstrate compliance?
 1. ADRs record architectural decisions, not ordinary implementation details.
 2. Accepted ADRs should not be silently edited to reverse their meaning; supersede them with a new ADR.
 3. Compatibility- or security-affecting code changes should cite the relevant ADR in the PR/commit description.
-4. The current implementation remains governed by existing GitMemo release contracts until the controlled Runethread cutover in ADR-009 is actually implemented and released.
+4. Released Runethread contracts remain immutable historical authority for repositories pinned to them until an explicit supported migration changes that repository's contract state.

@@ -1,0 +1,45 @@
+# Managed by Runethread. Stable bootstrap workflow v1.
+# The bootstrap pin intentionally starts at v0.6.0; it only resolves the release
+# recorded in .runethread/lock.json. The resolved release performs full validation.
+name: Validate Runethread Memory
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out memory repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.0'
+
+      - name: Install stable Runethread trust bootstrap
+        run: go install github.com/runethread/core/cmd/runethread@v0.6.0
+
+      - name: Resolve pinned Runethread release
+        id: pinned
+        run: |
+          VERSION="$("$(go env GOPATH)/bin/runethread" trust version .)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned Runethread CLI
+        run: go install github.com/runethread/core/cmd/runethread@${{ steps.pinned.outputs.version }}
+
+      - name: Validate memory repository
+        run: |
+          "$(go env GOPATH)/bin/runethread" validate .
+
+      - name: Report derived index freshness
+        run: |
+          if ! "$(go env GOPATH)/bin/runethread" index --check .; then
+            echo "::warning::Runethread derived indexes are stale. Canonical memories remain authoritative; regenerate indexes when an execution-capable client is available."
+          fi

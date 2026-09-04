@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/runethread/core/internal/buildinfo"
+	"github.com/runethread/core/internal/fsafety"
 	"github.com/runethread/core/internal/memory"
 )
 
@@ -56,7 +57,18 @@ type Result struct {
 }
 
 func Generate(root string) (Result, error) {
-	records, err := memory.LoadAll(root)
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireOptionalRegularTree(root, "projects"); err != nil {
+			return Result{}, fmt.Errorf("unsafe projects tree: %w", err)
+		}
+	}
+	var records []memory.Record
+	var err error
+	if buildinfo.ContractVersion >= 8 {
+		records, err = memory.LoadAllStrict(root)
+	} else {
+		records, err = memory.LoadAll(root)
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -122,6 +134,11 @@ func ExistingPaths(root string) ([]string, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	if buildinfo.ContractVersion >= 8 {
+		if err := requireOptionalRegularTree(root, "index"); err != nil {
+			return nil, err
+		}
+	}
 
 	var paths []string
 	err := filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
@@ -167,6 +184,13 @@ func MarkStale(root string) error {
 }
 
 func IsMarkedStale(root string) bool {
+	if buildinfo.ContractVersion >= 8 {
+		if _, err := ExistingPaths(root); err != nil {
+			return true
+		}
+		_, err := os.Lstat(filepath.Join(root, filepath.FromSlash(StaleMarkerPath)))
+		return err == nil
+	}
 	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(StaleMarkerPath)))
 	return err == nil
 }
@@ -357,6 +381,16 @@ func projectDisplayName(root, slug string) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+func requireOptionalRegularTree(root, rel string) error {
+	base := filepath.Join(root, filepath.FromSlash(rel))
+	if _, err := os.Lstat(base); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return fsafety.RequireTree(root, rel)
 }
 
 func sortedKeys[T any](m map[string][]T) []string {
