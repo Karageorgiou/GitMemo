@@ -1,0 +1,17 @@
+# Safety-critical Runethread surfaces. These owners become useful immediately
+# for review routing and can be made mandatory once a second maintainer exists.
+
+/AGENTS.md @Karageorgiou
+/docs/runethread/ENGINEERING_PROCESS.md @Karageorgiou
+/docs/runethread/CURRENT_MILESTONE.md @Karageorgiou
+/.github/workflows/ @Karageorgiou
+/.github/dependabot.yml @Karageorgiou
+/.github/CODEOWNERS @Karageorgiou
+/scripts/check* @Karageorgiou
+/internal/trust/ @Karageorgiou
+/internal/upgrader/ @Karageorgiou
+/schema/ @Karageorgiou
+/MEMORY_PROTOCOL.md @Karageorgiou
+/docs/TRUST_MODEL.md @Karageorgiou
+/docs/REPOSITORY_VALIDATION.md @Karageorgiou
+/docs/INDEX_FORMAT.md @Karageorgiou

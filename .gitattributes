@@ -1,0 +1,6 @@
+# Runethread hashes and validates text bytes. Keep repository text canonical
+# across operating systems regardless of a developer's global core.autocrlf.
+* text=auto eol=lf
+
+# Built release artifacts are binary when they appear in a working tree.
+*.exe binary
