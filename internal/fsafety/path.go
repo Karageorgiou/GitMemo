@@ -23,6 +23,23 @@ func RequireDirectory(path string) error {
 	return nil
 }
 
+// ReadRegularFile requires path itself to be a regular file and refuses a
+// symbolic-link leaf. Repository-owned paths should prefer ReadRegularFileUnder
+// so ancestor directories are checked as well.
+func ReadRegularFile(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("%s is a symbolic link", path)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	return os.ReadFile(path)
+}
+
 // RegularFileUnder resolves a repository-relative path without following any
 // symbolic link in the root, ancestor directories, or final file. The final
 // object must be a regular file.
