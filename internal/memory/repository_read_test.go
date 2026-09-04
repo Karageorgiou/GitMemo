@@ -10,13 +10,7 @@ import (
 func TestLoadUnderRejectsSymlinkAncestor(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	data, err := os.ReadFile(filepath.Join("..", "..", "internal", "upgrader", "testdata", "runethread-v0.7.0", ".runethread", "config.json"))
-	if err != nil {
-		// The fixture is deliberately not a memory sidecar. We only need bytes at
-		// the target because filesystem rejection must happen before decoding.
-		data = []byte("{}\n")
-	}
-	if err := os.WriteFile(filepath.Join(outside, "linked.json"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(outside, "linked.json"), []byte("{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
