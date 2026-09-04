@@ -76,7 +76,7 @@ func TestTakeRegularSnapshotsRejectsSymlinkAndPreservesRegularBytes(t *testing.T
 	if err := os.Symlink(outside, link); err != nil {
 		t.Skipf("symbolic links unavailable: %v", err)
 	}
-	if _, err := takeRegularSnapshots(root, []string{"linked.txt"}); err == nil || !strings.Contains(err.Error(), "must be a regular file") {
+	if _, err := takeRegularSnapshots(root, []string{"linked.txt"}); err == nil || !strings.Contains(err.Error(), "symbolic link") {
 		t.Fatalf("symlink snapshot error = %v", err)
 	}
 }
