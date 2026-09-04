@@ -16,6 +16,8 @@ REQUIRED_FILES = (
     ".github/pull_request_template.md",
     ".github/workflows/validate.yml",
     ".github/workflows/release.yml",
+    ".github/dependabot.yml",
+    ".github/CODEOWNERS",
     "scripts/check-pr-impact.py",
     "scripts/check_pr_impact_test.py",
     "scripts/check_development_policy.py",
@@ -63,6 +65,19 @@ PROCESS_NEEDLES = (
     "Stop conditions",
 )
 
+DEPENDABOT_NEEDLES = (
+    'package-ecosystem: "gomod"',
+    'package-ecosystem: "github-actions"',
+)
+
+CODEOWNERS_NEEDLES = (
+    "/AGENTS.md @Karageorgiou",
+    "/docs/runethread/ENGINEERING_PROCESS.md @Karageorgiou",
+    "/.github/workflows/ @Karageorgiou",
+    "/internal/trust/ @Karageorgiou",
+    "/internal/upgrader/ @Karageorgiou",
+)
+
 
 def read(root: Path, rel: str, errors: list[str]) -> str:
     path = root / rel
@@ -92,6 +107,8 @@ def check(root: Path) -> list[str]:
 
     validate = read(root, ".github/workflows/validate.yml", errors)
     release = read(root, ".github/workflows/release.yml", errors)
+    dependabot = read(root, ".github/dependabot.yml", errors)
+    codeowners = read(root, ".github/CODEOWNERS", errors)
     agents = read(root, "AGENTS.md", errors)
     process = read(root, "docs/runethread/ENGINEERING_PROCESS.md", errors)
 
@@ -108,6 +125,13 @@ def check(root: Path) -> list[str]:
 
     if not re.search(r"(?m)^\s*contents:\s*write\s*$", release):
         errors.append("release.yml: release publication requires explicit contents: write")
+
+    for needle in DEPENDABOT_NEEDLES:
+        if needle not in dependabot:
+            errors.append(f"dependabot.yml: missing mandatory update ecosystem {needle!r}")
+    for needle in CODEOWNERS_NEEDLES:
+        if needle not in codeowners:
+            errors.append(f"CODEOWNERS: missing safety-critical ownership rule {needle!r}")
 
     for needle in AGENT_NEEDLES:
         if needle not in agents:
