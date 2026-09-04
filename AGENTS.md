@@ -2,7 +2,7 @@
 
 This file applies to automated coding agents and AI assistants working in `runethread/core`.
 
-The authoritative development procedure is [`docs/runethread/ENGINEERING_PROCESS.md`](docs/runethread/ENGINEERING_PROCESS.md). Read it before making a substantive change. Also read the relevant accepted ADRs and architecture/roadmap documents for the area being changed.
+Before making a substantive change, read [`docs/runethread/ENGINEERING_PROCESS.md`](docs/runethread/ENGINEERING_PROCESS.md) and [`docs/runethread/CURRENT_MILESTONE.md`](docs/runethread/CURRENT_MILESTONE.md). Also read the relevant accepted ADRs and architecture/roadmap documents for the area being changed. The engineering-process document governs how changes are made; the current-milestone document identifies the immediate verified work boundary.
 
 ## Non-negotiable working rules
 
