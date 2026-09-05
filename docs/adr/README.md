@@ -32,6 +32,7 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-015](ADR-015-project-current-state-projection-semantics.md) | Project current-state documents are asynchronous orientation projections in the next contract | Accepted |
 | [ADR-016](ADR-016-phase-2-6-hosted-trust-boundary-hardening.md) | Phase 2.6 hosted trust-boundary hardening | Accepted |
 | [ADR-017](ADR-017-reconciliation-privacy-and-publication-fencing.md) | Phase 2.6 reconciliation, repository privacy, and publication fencing | Accepted |
+| [ADR-018](ADR-018-indeterminate-publication-history-preservation.md) | Indeterminate publication preserves possible committed history | Accepted |
 
 ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
 
@@ -40,6 +41,8 @@ ADR-015 records a required **next-contract** semantic change. Contract v8 remain
 ADR-016 hardens the Phase 2.6 hosted boundary. It makes the ADR-015 projection-capable contract a normal hosted-write admission prerequisite, separates finalizer/auditor evidence-write capabilities, pins live evidence against premature retention/GC, and replaces the unproven Worker-only REST-ref-CAS assumption with a concrete minimal Git publisher executor unless a future GitHub API proves true expected-old ref CAS.
 
 ADR-017 further hardens the same hosted profile. Ordinary out-of-band adoption must preserve the last accepted canonical revision in ancestry so committed Git/idempotency evidence is not erased; directly observed private repository visibility becomes a live hosted-write eligibility condition; `PUBLISHING` remains fenced until all issued publisher capabilities for the generation are quiesced; and the managed memory validation-workflow trigger transition must ship through the released upgrader/downstream migration rather than ordinary provider writes. Where older ADR-014/ADR-016 recovery/publication wording is less strict, ADR-017 controls.
+
+ADR-018 closes the remaining indeterminate-publication/history gap. A candidate that is proven or possibly published remains a protected history anchor until publication and ancestry are resolved; a later current-ref read cannot erase that fact, and ordinary descendant adoption from an older accepted base is forbidden while it could exclude a previously committed candidate. Where ADR-017 reconciliation considered only the last accepted base revision, ADR-018 controls.
 
 ## ADR format
 
