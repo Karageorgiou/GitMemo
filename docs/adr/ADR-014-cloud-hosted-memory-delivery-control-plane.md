@@ -26,6 +26,16 @@ Phase 2.6 uses a **Cloudflare-hosted remote memory-delivery control plane** as i
 
 This ADR supersedes only the conflicting GitHub-Actions-first implementation details of ADR-012 and ADR-013. Their semantic/canonical invariants remain accepted unless this ADR explicitly changes them.
 
+### Hosted component and release boundary
+
+Cloudflare/provider-specific hosted implementation lives outside `runethread/core`. The target component/repository is `runethread/hosted` unless implementation preflight identifies a concrete repository-topology conflict before code is created.
+
+`runethread/core` continues to own deterministic memory semantics and local interfaces. The hosted component consumes Core through an immutable verified Runethread runtime/release or exact explicitly verified development build. It MUST NOT execute floating public `main` as the production memory engine.
+
+A hosted delivery release has its own explicit release/protocol identity and records the exact Core/runtime binary digest plus Container image/delivery identity used for a mutation. Finalizer and auditor use the same pinned deterministic Runethread runtime/image identity but different fresh privilege contexts.
+
+Cloudflare Worker activation and Container image rollout are not treated as one atomic deployment. Breaking Worker/Workflow/container protocol changes are control-plane barriers: admission must be drained/placed in maintenance or a versioned blue/green deployment must keep old and new execution paths separate until in-flight work terminates. Compatible rollouts must deliberately support the platform's temporary old/new Worker/container overlap. One operation MUST NOT silently cross incompatible hosted delivery/runtime semantics.
+
 ### One hosted architecture for GitHub Free and paid users
 
 Runethread does not maintain separate Free-versus-paid memory-delivery implementations.
@@ -57,9 +67,9 @@ On an unprotected private repository, out-of-band `main` movement is detectable 
 The Phase 2.6 hosted profile has five distinct responsibilities.
 
 1. **Public Worker/API edge** — authenticates/authorizes requests, resolves the target authorized repository, enforces request/rate/resource limits, and routes to the repository coordinator. It does not implement memory semantics and MUST NOT hold the GitHub App private key.
-2. **Per-repository Durable Object** — owns hosted lane state, admission/serialization, operation identity/status mapping, suspension/maintenance/reconciliation state, the active Workflow identity, and the last accepted canonical revision for that repository. It is the provider-specific durable coordinator for pending delivery state, not a second copy of canonical memory.
+2. **Per-repository Durable Object / repository runtime** — owns hosted lane state, admission/serialization, operation identity/status mapping, suspension/maintenance/reconciliation state, the active Workflow identity, and the last accepted canonical revision for that repository. It also manages the repository's attached finalizer Container through Cloudflare's Durable-Object/Container relationship rather than introducing a second per-repository coordinator solely for Container lifecycle.
 3. **Cloudflare Workflow** — owns resumable execution checkpoints and retries for one admitted operation. Workflow steps are individually retryable and MUST be idempotent. Workflow execution state does not replace canonical Git evidence for whether a memory mutation committed.
-4. **Container runtime** — runs the real Runethread Go binary/Core and Git in Linux. Core remains provider-independent and MUST NOT import Cloudflare or GitHub SDK dependencies merely because the hosted adapter uses those providers.
+4. **Container runtime** — runs the real Runethread Go binary/Core and Git in Linux. The repository runtime's attached Container performs finalization; a separate fresh Container instance performs independent audit. Core remains provider-independent and MUST NOT import Cloudflare or GitHub SDK dependencies merely because the hosted adapter uses those providers.
 5. **Private internal GitHub gateway/publisher service** — holds the GitHub App private key and exposes only narrow internal repository-auth/publication operations through a Cloudflare Service Binding or equivalent non-public capability boundary. The public API Worker and semantic clients cannot read the App private key or mint arbitrary installation credentials.
 
 The coordinator and Workflow have deliberately different roles: the Durable Object answers *which operation may use this repository lane and what hosted lane state applies*; the Workflow answers *which retryable execution step this one operation has durably reached*. Their state models must not become two independently mutable sources of truth for the same transition.
@@ -161,7 +171,7 @@ The manifest must bind at least:
 - candidate commit `C` and candidate tree identity;
 - request fingerprint;
 - mutation metadata;
-- exact Runethread runtime/container-image/build identity and pinned contract identity used for finalization;
+- exact Runethread runtime/container-image/hosted-delivery identity and pinned contract identity used for finalization;
 - a cryptographic digest of the candidate evidence/package.
 
 Candidate transport is optimized for **total transferred work and exactness**, not for a ceremonial zero-clone count. A full current-tree package can be wasteful for large repositories, while a small delta package requires the auditor to obtain exact base `H0`. Phase 2.6 therefore permits either:
@@ -255,7 +265,7 @@ Contract/schema/trust/repository-format/bootstrap/migration/managed-delivery cha
 
 The per-repository coordinator represents a barrier through a state equivalent to `MAINTENANCE`. New data-plane publication is refused/parked while the barrier is active. Pre-barrier semantic operations that have not committed cannot publish under post-barrier semantics without re-preparation.
 
-Installing or materially changing the Phase 2.6 hosted delivery mechanism itself is a control-plane barrier and must be rolled out through the full development/release/downstream process rather than through the new normal data-plane path it is creating.
+Installing or materially changing the Phase 2.6 hosted delivery mechanism itself is a control-plane barrier and must be rolled out through the full development/release/downstream process rather than through the new normal data-plane path it is creating. Hosted deployment machinery must account for non-atomic Worker/Container rollout as defined by the hosted component/release boundary above.
 
 ### Resource, abuse, and privacy limits
 
@@ -296,15 +306,18 @@ The hosted Cloudflare implementation must therefore be replaceable without chang
 - GitHub Free and paid users share one normal hosted Runethread mutation architecture.
 - Paid GitHub branch/ruleset protection becomes defense-in-depth rather than a hidden product prerequisite.
 - The hosted Runethread service requires a Cloudflare Workers Paid account for Containers; end users do not need their own Cloudflare account or paid Cloudflare plan.
+- Provider-specific hosted code/release lifecycle stays outside Core; the target implementation repository is `runethread/hosted`.
 - GitHub Actions runner startup latency leaves the normal interactive mutation critical path.
 - The Phase 2.6 implementation now owns a small hosted operational state store per repository, while canonical semantic state and committed evidence remain Git-owned.
 - Existing MemoryService mutation semantics can be reused rather than split/reimplemented solely to produce a hosted candidate.
+- The repository runtime Durable Object can manage its attached finalizer Container without a second per-repository coordination object.
 - Phase 2.6 v1 serializes the expensive finalization/audit/publication workflow per repository so known-stale queued operations can be rejected before Container work.
 - A cold finalizer targets one source clone/fetch; warm cache reuse may reduce this to fetch-only without becoming a correctness dependency.
 - Independent audit consumes exact immutable candidate evidence and may use a bounded read-only `H0` fetch when that is cheaper/simpler than transporting a full candidate snapshot. Transfer volume and exactness, not clone count alone, drive optimization.
 - Publisher implementation can be clone-free if GitHub Git-object APIs preserve exact candidate identity; otherwise exact candidate push is the safe fallback.
 - Long-lived GitHub App key material is isolated from the public API and execution containers behind a private internal publisher capability boundary.
 - Per-write post-publication full validation is removed from the normal synchronous path; cheap exact-ref confirmation plus webhook/reconciliation/health checks provide distinct evidence without re-proving the same candidate.
+- Breaking hosted deployments require explicit version/barrier handling because provider Worker/Container rollout is not assumed atomic.
 - Project current-state prose is prevented from becoming an authoritative dual-write requirement in the memory transaction.
 - The Cloudflare control plane can later absorb richer remote execution/orchestration capabilities without changing Core's deterministic memory semantics, while the future general Orchestrator remains a separate concern under ADR-005.
 
@@ -317,6 +330,10 @@ Rejected as the final hosted profile. It preserves provider runner latency and w
 ### Maintain separate Free and paid GitHub delivery implementations
 
 Rejected. Branch protection availability should not fork Runethread's normal mutation semantics. One hosted publisher path plus optional GitHub protection is simpler and easier to verify.
+
+### Put hosted Cloudflare/provider code in `runethread/core`
+
+Rejected. Provider runtimes, deployment state, credentials, TypeScript/Worker dependencies, and cloud release churn are operational concerns separate from the durable deterministic memory compatibility surface. The hosted component consumes Core rather than making Core consume the hosted provider.
 
 ### Put the GitHub App private key in each user's memory-repository Actions secrets or public API Worker
 
@@ -356,33 +373,36 @@ An implementation complies with this ADR only if tests/integration evidence demo
 
 1. hosted mutation execution works for a private GitHub repository without requiring private-repository branch protection;
 2. the same normal hosted mutation path works when stronger GitHub branch/ruleset protection is enabled;
-3. the semantic client and public API Worker do not receive canonical GitHub write credentials or the App private key;
-4. the App private key exists only in a private internal GitHub gateway/publisher capability boundary and token issuance is repository/permission scoped;
-5. the per-repository coordinator permits at most one heavy mutation Workflow at a time in v1 while independent repositories can progress independently;
-6. after a known hosted commit advances `main`, queued stale work becomes `NEEDS_REPREPARE` before Container startup;
-7. Workflow retry/resume cannot duplicate a canonical mutation, and loss of a completion callback cannot cause the coordinator to release the lane without reconciliation;
-8. a cold normal finalization path performs no more than one GitHub source clone/fetch for finalization, while any warm clone reuse is discarded/refreshed safely when stale or dirty;
-9. the finalizer clone strategy preserves historical idempotency evidence required by `FindAppliedOperation` and rejects unsafe/untrusted Git execution features;
-10. the hosted finalizer invokes the existing MemoryService/Core mutation implementation and does not perform a redundant second Index write;
-11. remote GitHub `main` remains at `H0` after finalization and before audit/publication;
-12. candidate evidence is cryptographically bound to `H0`, exact `C`, tree identity, request fingerprint, runtime/container-image/contract identity, and operation identity;
-13. candidate packaging works correctly with the chosen clone mode and cannot omit required promisor objects;
-14. a fresh auditor reconstructs and verifies exact `C` from immutable candidate evidence plus, when needed, a bounded read-only exact-`H0` source without obtaining publication authority;
-15. the fresh auditor performs no repair and passes hard validation plus strict Index v2 freshness on exact `C`;
-16. audit failure leaves GitHub canonical state unchanged and suspends the hosted repository lane;
-17. publication requires the remote canonical ref to still equal `H0` and changes it only to exact audited `C` without force, merge, or semantic reconstruction;
-18. an unexpected canonical mismatch during the one active hosted workflow enters reconciliation, while known queued stale work is parked as ordinary `NEEDS_REPREPARE`;
-19. the preferred clone-free GitHub-object publication path is used only if an integration test proves GitHub receives the exact candidate commit/tree identity; otherwise the exact-candidate push fallback is used;
-20. successful publication is followed only by cheap exact-ref confirmation in the normal synchronous path, not another full clone/validation cycle;
-21. signed GitHub App push webhooks detect normal and out-of-band `main` movement idempotently but are not required for correctness when delivery is delayed/missed;
-22. unexpected/out-of-band canonical movement enters a fail-closed reconciliation state before later hosted writes;
-23. the existing push-on-every-memory GitHub Actions validation is removed from the normal hosted data-plane critical/background path through the proper managed workflow/control-plane rollout, while recovery/migration/health checks remain available;
-24. `NO_OP`, `ALREADY_COMMITTED`, stale reprepare, crash retry, cancellation, finalization failure, audit failure, publication race, provider retry, and reconciliation outcomes are deterministic and tested;
-25. a control-plane barrier prevents pre-barrier prepared operations from publishing under changed semantics;
-26. authentication and repository authorization prevent a caller from targeting a repository solely by guessing/supplying its identifier;
-27. request/repository/artifact/runtime/retry limits fail explicitly without changing canonical Git state;
-28. private candidate/repository content is excluded from ordinary logs/client responses and deleted according to a tested retention/recovery policy;
-29. project current-state orientation files are not silently dual-written by provider code as part of the atomic memory transaction;
-30. local/offline MemoryService behavior remains usable without Cloudflare and Core does not import provider-specific hosted dependencies;
-31. Phase 3 MCP can call the same hosted delivery boundary without changing canonical memory format or mutation semantics;
-32. end-to-end latency/cost measurements distinguish cold/warm source acquisition, bytes transferred, finalization, candidate packaging, audit, publication, and provider startup components so further optimization is evidence-driven.
+3. provider-specific hosted code remains outside Core and the hosted runtime uses an exact verified Core/runtime identity rather than floating `main`;
+4. the semantic client and public API Worker do not receive canonical GitHub write credentials or the App private key;
+5. the App private key exists only in a private internal GitHub gateway/publisher capability boundary and token issuance is repository/permission scoped;
+6. the repository-runtime Durable Object manages lane state and its attached finalizer Container without another per-repository coordination authority;
+7. the per-repository coordinator permits at most one heavy mutation Workflow at a time in v1 while independent repositories can progress independently;
+8. after a known hosted commit advances `main`, queued stale work becomes `NEEDS_REPREPARE` before Container startup;
+9. Workflow retry/resume cannot duplicate a canonical mutation, and loss of a completion callback cannot cause the coordinator to release the lane without reconciliation;
+10. a cold normal finalization path performs no more than one GitHub source clone/fetch for finalization, while any warm clone reuse is discarded/refreshed safely when stale or dirty;
+11. the finalizer clone strategy preserves historical idempotency evidence required by `FindAppliedOperation` and rejects unsafe/untrusted Git execution features;
+12. the hosted finalizer invokes the existing MemoryService/Core mutation implementation and does not perform a redundant second Index write;
+13. remote GitHub `main` remains at `H0` after finalization and before audit/publication;
+14. candidate evidence is cryptographically bound to `H0`, exact `C`, tree identity, request fingerprint, runtime/container-image/hosted-delivery/contract identity, and operation identity;
+15. candidate packaging works correctly with the chosen clone mode and cannot omit required promisor objects;
+16. a fresh auditor reconstructs and verifies exact `C` from immutable candidate evidence plus, when needed, a bounded read-only exact-`H0` source without obtaining publication authority;
+17. the fresh auditor performs no repair and passes hard validation plus strict Index v2 freshness on exact `C`;
+18. audit failure leaves GitHub canonical state unchanged and suspends the hosted repository lane;
+19. publication requires the remote canonical ref to still equal `H0` and changes it only to exact audited `C` without force, merge, or semantic reconstruction;
+20. an unexpected canonical mismatch during the one active hosted workflow enters reconciliation, while known queued stale work is parked as ordinary `NEEDS_REPREPARE`;
+21. the preferred clone-free GitHub-object publication path is used only if an integration test proves GitHub receives the exact candidate commit/tree identity; otherwise the exact-candidate push fallback is used;
+22. successful publication is followed only by cheap exact-ref confirmation in the normal synchronous path, not another full clone/validation cycle;
+23. signed GitHub App push webhooks detect normal and out-of-band `main` movement idempotently but are not required for correctness when delivery is delayed/missed;
+24. unexpected/out-of-band canonical movement enters a fail-closed reconciliation state before later hosted writes;
+25. the existing push-on-every-memory GitHub Actions validation is removed from the normal hosted data-plane critical/background path through the proper managed workflow/control-plane rollout, while recovery/migration/health checks remain available;
+26. `NO_OP`, `ALREADY_COMMITTED`, stale reprepare, crash retry, cancellation, finalization failure, audit failure, publication race, provider retry, and reconciliation outcomes are deterministic and tested;
+27. a control-plane barrier prevents pre-barrier prepared operations from publishing under changed semantics;
+28. breaking hosted Worker/Workflow/container deployments cannot mix incompatible execution semantics inside one operation despite non-atomic provider rollout;
+29. authentication and repository authorization prevent a caller from targeting a repository solely by guessing/supplying its identifier;
+30. request/repository/artifact/runtime/retry limits fail explicitly without changing canonical Git state;
+31. private candidate/repository content is excluded from ordinary logs/client responses and deleted according to a tested retention/recovery policy;
+32. project current-state orientation files are not silently dual-written by provider code as part of the atomic memory transaction;
+33. local/offline MemoryService behavior remains usable without Cloudflare and Core does not import provider-specific hosted dependencies;
+34. Phase 3 MCP can call the same hosted delivery boundary without changing canonical memory format or mutation semantics;
+35. end-to-end latency/cost measurements distinguish cold/warm source acquisition, bytes transferred, finalization, candidate packaging, audit, publication, and provider startup components so further optimization is evidence-driven.
