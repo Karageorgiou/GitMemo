@@ -2,7 +2,7 @@
 
 Status: **Proposed**
 
-This roadmap sequences the work so identity is made coherent while the project is still pre-v1, then each engineering stage proves one architectural assumption before adding another dependency.
+This roadmap sequences the work so identity is made coherent while the project is still pre-v1, then each engineering stage proves one architectural assumption before adding another dependency. `CURRENT_MILESTONE.md` remains the authority for the immediate work boundary.
 
 ## Phase 0 — architecture freeze
 
@@ -107,9 +107,106 @@ Exit criteria:
 - a failed hard validation cannot produce a successful commit/result;
 - tests verify rollback and concurrency failure modes.
 
+## Phase 2.5 — compatibility hardening and release separation
+
+Goal: harden repository/runtime compatibility before adding new transport or delivery surfaces.
+
+Primary work:
+
+- explicit runtime-release versus contract-release identity;
+- contract v8 compatibility matrix and migration rules;
+- filesystem/repository-boundary safety hardening;
+- deterministic upgrade behavior across supported source states;
+- public template and known private-memory migration to the v0.8 contract state;
+- engineering-process and cross-platform pipeline hardening.
+
+Exit criteria:
+
+- Runethread v0.8.0 is published as an immutable release;
+- contract v8 semantics and release separation are explicit and tested;
+- the public template and known private memory repository are migrated and permanently validated;
+- historical compatibility and migration evidence are retained.
+
+Status: **Complete**.
+
+## Phase 2.6 — Memory Write Delivery Pipeline
+
+Goal: make normal external memory delivery fast, deterministic, race-safe, and auditable before introducing MCP transport.
+
+Governing decisions:
+
+- ADR-012 — audited candidate promotion for external memory delivery;
+- ADR-013 — per-repository serialized mutation-delivery queue.
+
+Architecture:
+
+```text
+semantic caller
+      |
+sealed mutation request
+      |
+per-repository logical delivery queue
+      |
+MemoryService finalizer
+      |
+noncanonical exact candidate
+      |
+fresh read-only audit
+      |
+exact expected-revision fast-forward publication
+      |
+audited canonical main
+```
+
+Primary work:
+
+- sealed GitHub workflow-dispatch request carrying one complete MemoryService-compatible operation;
+- GitHub Actions as the first replaceable execution adapter, not the architectural queue authority;
+- finalization through the existing deterministic MemoryService/Core implementation;
+- candidate construction off canonical `main` without premature publication;
+- Index v2 regeneration, hard validation, and strict freshness before publication;
+- fresh read-only audit of the exact candidate revision/tree;
+- exact Git-SHA compare-and-swap fast-forward publication with no force push or intervening merge commit;
+- dedicated least-privilege Runethread GitHub App installed only on user-authorized memory repositories as the canonical publisher;
+- managed memory-repository policy that prevents routine writers from bypassing the audited path;
+- operation state covering queue/finalization/audit/publication/committed outcomes;
+- stale-operation parking as `NEEDS_REPREPARE` without automatic semantic rebasing or reinterpretation;
+- idempotent crash/lost-response retry using the existing operation identity;
+- cancellation before publication and exact outcome resolution once publication begins;
+- repository write-lane suspension on audit disagreement or red independent audit;
+- exclusive barriers for contract/schema/trust/repository-format/bootstrap/workflow/migration changes;
+- rollout through `runethread/memory-template` and then a real private memory repository;
+- end-to-end latency measurement against the previous duplicated synchronous workflow.
+
+Phase 2.6 v1 deliberately uses singleton operations. Deferred work includes semantic dependency quantification, neighboring-operation batching/coalescing, and automatic semantic re-preparation.
+
+Exit criteria are tracked in issue #20. At minimum:
+
+- a GitHub-only semantic caller can submit one sealed structured MemoryService mutation without directly editing canonical memory files;
+- no half-written request race exists;
+- unaudited candidates cannot become canonical;
+- Index v2 is rebuilt and strict freshness passes;
+- a fresh read-only auditor verifies the exact candidate and cannot publish it;
+- publication fails closed if canonical `main` moved;
+- successful publication makes the exact audited MemoryService candidate canonical;
+- routine writers cannot bypass the managed audited publication path;
+- stale operations park as `NEEDS_REPREPARE` without semantic auto-repair;
+- crash/lost-response retry cannot duplicate a canonical mutation;
+- audit disagreement suspends writes while safe canonical reads remain available;
+- control-plane barriers invalidate incompatible queued semantic work;
+- correctness is independent of GitHub workflow execution order;
+- the delivery mechanism remains independent of MCP and does not make Core depend on GitHub internally;
+- the GitHub execution adapter can later be replaced without a memory-format migration solely for queue state;
+- template/private rollout is verified end-to-end;
+- measured latency demonstrates removal of the previous redundant blocking ceremony without removing distinct correctness gates.
+
+**Phase 3 is blocked until Phase 2.6 exits green.**
+
 ## Phase 3 — local MCP adapter
 
 Goal: expose Core operations to compatible AI clients without duplicating business logic.
+
+Phase 3 begins only after the Phase 2.6 Memory Write Delivery Pipeline is implemented and independently verified. MCP is transport over the established MemoryService/delivery semantics; it does not become a second owner of memory mutation, queueing, auditing, concurrency, or Git publication behavior.
 
 Architecture:
 
@@ -135,7 +232,8 @@ Start with local/stdio transport where supported.
 Exit criteria:
 
 - a compatible external AI client can retrieve and mutate memory through Core without understanding repository layout;
-- MCP-specific code contains transport translation, not repository business rules.
+- MCP-specific code contains transport translation, not repository business rules;
+- the accepted Phase 2.6 delivery/concurrency invariants remain unchanged by transport.
 
 ## Phase 4 — Orchestrator skeleton
 
@@ -312,8 +410,8 @@ Possible future work:
 
 ## Immediate next engineering milestone
 
-After Phase 0 ADR review, the next milestone is **not** a new memory API. It is the clean identity cutover:
+The immediate milestone is **Phase 2.6 — Memory Write Delivery Pipeline**.
 
-> Preserve Git and canonical memory history while moving the implementation to `runethread/core`, converting current product/module/CLI/native-repository identifiers to Runethread, and deterministically migrating the known GitMemo v0.5.0 private memory repository with identical UUID membership and full post-migration validation.
+> Build and verify the audited, per-repository mutation-delivery path defined by ADR-012 and ADR-013 so a GitHub/cloud-only caller can submit a sealed MemoryService mutation, receive deterministic asynchronous operation state, and make only an independently audited exact candidate canonical through race-safe publication.
 
-Only after that cutover is verified should new Core APIs, MCP surfaces, and Orchestrator components be built.
+Only after Phase 2.6 exits green should Phase 3 MCP implementation begin.
