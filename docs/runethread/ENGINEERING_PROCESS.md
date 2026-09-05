@@ -436,19 +436,29 @@ A deliberate stop is a successful safety outcome, not a failure of progress.
 
 ---
 
-## 20. Current Phase 3 application
+## 20. Current Phase 2.6 application
 
-Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, and runtime-release / contract-release separation is now part of the current compatibility model.
+Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, runtime-release / contract-release separation is part of the compatibility model, and ADR-012/ADR-013 are accepted.
 
-For Phase 3 MCP work:
+Phase 2.6 Memory Write Delivery Pipeline is the current milestone. Phase 3 MCP implementation is blocked until Phase 2.6 satisfies the exit criteria tracked in issue #20.
 
-- start from a freshly verified current `main`, not a Phase 2.5 implementation branch;
-- re-check current authoritative MCP SDK/protocol and Go/toolchain requirements immediately before introducing dependencies;
-- implement MCP as a thin transport adapter over the existing MemoryService application boundary;
-- do not duplicate storage, lifecycle, provenance, trust, indexing, idempotency, concurrency, or Git transaction logic in the adapter;
-- preserve the CLI/native service path and provider independence;
-- treat MCP tool/request/result semantics as a public API surface and test compatibility/error behavior explicitly;
-- do not introduce a contract/schema/repository-format change merely to add transport unless normative repository behavior genuinely changes;
-- keep the separate Orchestrator and hosted/cloud work out of the first local MCP milestone unless independently approved.
+For Phase 2.6 work:
 
-Any new evidence that changes repository semantics must still pass the normal contract and migration gates above rather than being smuggled into Phase 3 as an adapter detail.
+- start from a freshly verified current `main` and the accepted ADR-012/ADR-013 boundaries;
+- keep the existing Core development pipeline intact; do not create a reduced-safety "fast mode" for Core engineering changes;
+- treat GitHub Actions as the first replaceable execution adapter, not the architectural queue authority or a new canonical database;
+- accept one sealed MemoryService-compatible mutation request at the GitHub adapter boundary rather than watching a caller assemble multi-commit request files;
+- invoke the existing deterministic MemoryService/Core implementation for finalization rather than reimplementing canonical pathing, lifecycle, provenance, trust, indexing, idempotency, concurrency, or Git transaction semantics in workflow code;
+- construct the candidate from the exact expected Git revision and keep it noncanonical until independent audit passes;
+- require Index v2 regeneration, hard validation, strict freshness, and a fresh read-only audit of the exact candidate before publication;
+- use the canonical Git commit SHA as the concurrency/version token and re-read canonical state immediately before publication;
+- publish only through a non-force fast-forward compare-and-swap to the exact audited candidate; stale canonical movement results in `NEEDS_REPREPARE`, not silent semantic rebasing;
+- use a dedicated least-privilege Runethread GitHub App and managed memory-repository policy for canonical publication in the GitHub-backed profile;
+- park stale operations outside the runnable lane without automatically reinterpreting user intent;
+- preserve idempotent crash/lost-response retry, cancellation-before-publication semantics, audit-failure write suspension, and exclusive control-plane barriers;
+- keep Phase 2.6 v1 singleton-only; semantic dependency quantification, neighboring-operation batching/coalescing, and automatic semantic re-preparation require later accepted design work;
+- roll the finished mechanism through the public template and then a real private memory repository under the normal downstream gates, and measure end-to-end latency against the prior duplicated synchronous workflow.
+
+For the later Phase 3 MCP work, retain the existing rule that MCP is a thin transport adapter over MemoryService and the accepted delivery lifecycle. Re-check current authoritative MCP SDK/protocol and Go/toolchain requirements only when Phase 3 actually becomes current; do not add MCP dependencies during Phase 2.6 merely because they are planned next.
+
+Any new evidence that changes repository semantics must still pass the normal contract and migration gates above rather than being smuggled into Phase 2.6 as a delivery-adapter detail.
