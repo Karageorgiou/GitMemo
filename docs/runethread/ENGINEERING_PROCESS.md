@@ -440,57 +440,57 @@ A deliberate stop is a successful safety outcome, not a failure of progress.
 
 Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, runtime-release / contract-release separation is part of the compatibility model, and ADR-012/ADR-013/ADR-014 are accepted.
 
-Phase 2.6 Memory Write Delivery Pipeline is the current milestone. Phase 3 MCP implementation is blocked until Phase 2.6 satisfies the exit criteria tracked in issue #20.
+Phase 2.6 Memory Write Delivery Pipeline is the current milestone. Phase 3 MCP implementation is blocked until Phase 2.6 satisfies issue #20.
 
 For Phase 2.6 work:
 
-- start from a freshly verified current `main` and the accepted ADR-012/ADR-013 invariants as amended by ADR-014;
-- keep the existing Core development pipeline intact; do not create a reduced-safety "fast mode" for Core engineering changes;
-- keep provider-specific hosted implementation outside `runethread/core` (target `runethread/hosted`), pin exact verified Core/runtime/container identities there, and preserve local/offline Core operation without Cloudflare;
-- treat Cloudflare as the primary hosted execution/control-plane provider for Phase 2.6;
-- use one repository-runtime Durable Object per immutable GitHub repository identity as the sole hosted lane/operation-state authority, with transactional SQLite for bounded queue state, one active operation, retry/backoff deadlines, evidence references, suspension/maintenance/reconciliation, and last accepted canonical revision;
-- use Cloudflare's Container/Durable-Object relationship so the repository runtime manages its attached finalizer Container instead of adding a second per-repository coordination object solely for lifecycle;
-- do not add Cloudflare Workflows in Phase 2.6 v1; drive the one active operation through an idempotent Durable Object state machine plus at-least-once alarms, with explicit retry/backoff state and rescheduling so correctness does not depend only on the platform's finite automatic alarm retries;
-- store full sealed request/candidate/audit bodies only in private content-addressed/no-overwrite object storage with short explicit retention; keep only opaque references/digests and bounded metadata in Durable Object state, logs, and client-visible status;
-- keep hosted operation-attempt identity separate from Core idempotency identity; hosted identity binds immutable repository identity plus exact sealed-request digest while Core remains authoritative for semantic committed retry and idempotency conflict;
-- keep the public API Worker free of the GitHub App private key and publication capability; hold the long-lived key only in a private internal GitHub gateway/publisher service, and request no Administration or Workflows permission for ordinary memory delivery;
-- authenticate callers and verify explicit authorization to the installed GitHub repository; never authorize mutation merely from a caller-supplied repository identifier;
-- serialize the whole hosted finalization/audit/publication operation per repository in v1 while preserving ADR-003's committed-idempotency-before-stale ordering; without a complete canonical idempotency index, stale work may require cold Container/source acquisition, but it must stop before candidate construction, Index write, packaging, and audit;
-- run the real Runethread Go/Core + Git finalizer in a Container and invoke existing MemoryService rather than reproducing canonical pathing, lifecycle, provenance, indexing, idempotency, concurrency, or Git transaction semantics in provider code;
-- on every fresh finalization invocation, restore/reconstruct the working clone to the directly observed remote canonical revision before calling Core; never retry against a surviving unpromoted local candidate because its Git history can make `FindAppliedOperation` mistake candidate evidence for canonical committed evidence;
-- make finalization itself idempotent through complete candidate evidence written first and an immutable attempt-bound finalization receipt written last with create-if-absent semantics; a retry uses a valid receipt or restarts from remote canonical state when no authoritative receipt exists;
-- preserve reachable commit history required for `FindAppliedOperation`; do not use shallow history that can hide committed idempotency evidence, and harden Git execution against repository-controlled hooks/submodules/filters/config/credential execution surfaces;
-- let `ApplyMutation` perform its existing committed-retry preflight, stale check, Index v2 write, hard validation, commit creation, and local-only fast-forward once; do not add a redundant equivalent generation/repair pass;
-- treat `NO_OP` as a Core-validated terminal outcome and do not invent Git evidence or skip Core validation merely because the requested operation is labeled `noop`;
-- distinguish request-local mutation failure from accepted canonical repository/trust/compatibility failure; an unhealthy canonical base fails closed at the lane rather than generating endless independent request failures;
-- bind exact candidate `C` to private immutable evidence containing operation/idempotency, `H0`, tree, request fingerprint, runtime/image/delivery identity, contract identity, and cryptographic digests; evidence/receipt mismatch is an integrity failure and orphan package data without a valid receipt is nonauthoritative;
-- audit exact `C` in a separate fresh reduced-privilege Container/DO context with hard validation, strict Index v2 freshness, candidate/request/runtime binding, and expected-diff checks; the auditor performs no repair and has no publication credential;
-- make audit completion idempotent through immutable audit evidence/receipt, and persist deterministic audit disagreement as lane suspension or conservative reconciliation before releasing the active operation;
-- require exact audit evidence to return to the repository Durable Object; only that lane authority may atomically transition `AUDITED -> PUBLISHING` after rechecking cancellation, lane state, evidence identity, authorization, and direct canonical ref state;
-- publish only exact DO-authorized audited `C` through atomic expected-old-revision non-force compare-and-swap; use clone-free Git-object publication only after integration evidence proves exact candidate identity, otherwise use an exact-candidate push fallback from a minimal privileged environment;
-- once `PUBLISHING` is durably entered, cancellation is no longer a correctness mechanism; after crash/response loss resolve exact Git state (`C`, `H0`, or unexpected) and retry only the same exact authorized publication when appropriate;
-- after exact publication, synchronously confirm only `main == C`; do not add another full clone/validation cycle merely to re-prove the same immutable candidate;
-- use signed GitHub push webhooks only as hints for fast observation; every relevant delivery triggers a direct canonical-ref read and stale/out-of-order webhook payloads never directly change accepted state;
-- distinguish proven uncommitted stale work (`NEEDS_REPREPARE`) from unexpected canonical movement during the one active hosted operation (`RECONCILIATION_REQUIRED`);
-- use one normal hosted architecture for GitHub Free and paid private repositories, treating paid branch/ruleset protection as optional defense-in-depth rather than a correctness prerequisite;
-- version the hosted delivery protocol/release and treat breaking Worker/Container/control-path changes as control-plane barriers; provider rollout is not assumed atomic, so incompatible changes require draining/maintenance or versioned blue/green isolation;
-- preserve stable idempotent crash/lost-response recovery, cancellation-before-publication, audit-failure suspension, explicit reconciliation, and exclusive control-plane barriers;
-- enforce explicit request/rate/repository/artifact/runtime/retry/operation-history/log/retention/privacy limits so quota/provider failure leaves canonical Git unchanged;
-- keep Phase 2.6 v1 singleton-only; semantic dependency quantification, neighboring-operation batching/coalescing, and automatic semantic re-preparation require later accepted design work;
-- do not turn project orientation/current-state prose into a required atomic-memory dual write; treat future refresh of those views as a separate projection/materialized-view concern;
-- remove push-on-every-normal-memory full GitHub Actions validation from the hosted data-plane path only through the proper managed workflow/control-plane rollout, and retain Actions where independent repository-health, migration, recovery, or control-plane validation proves a distinct invariant;
-- measure cold/warm source acquisition, bytes transferred, idempotency/stale preflight, finalization, candidate packaging, audit, publication, alarm/retry overhead, and total latency/cost separately so later optimization is evidence-driven.
+- start from freshly verified `main` and ADR-012/ADR-013 invariants as amended by ADR-014;
+- keep Core's existing development pipeline intact; no reduced-safety fast mode;
+- keep hosted provider code outside `runethread/core` (target `runethread/hosted`) and preserve local/offline Core operation;
+- use one repository-runtime Durable Object per immutable GitHub repository identity as sole hosted lane/operation-state authority;
+- bind each hosted repository explicitly to immutable repository identity + App installation + canonical branch ref + last accepted revision; normally discover the ref from default branch at adoption, but never silently follow branch/default changes, deletion, transfer, or authorization change;
+- keep bounded queue, active operation, phase/execution generation, retries/backoff/deadlines, evidence refs, canonical-ref binding, and lane state in transactional DO SQLite;
+- do not add Cloudflare Workflows in v1; use idempotent DO `drive()` plus at-least-once alarms with explicit rescheduling for prolonged retryable failures;
+- treat async interleaving as real: atomically claim phase + execution generation before external work, persist claim, perform Container/R2/GitHub I/O without long `blockConcurrencyWhile()`, then compare active operation/phase/generation before accepting the result; obsolete-generation outputs cannot advance state;
+- ensure only one authoritative external action exists for an active phase/generation; recovery may retry the same generation/action identity only under idempotent semantics;
+- return `ACCEPTED` only after durable request/operation state and recoverable alarm scheduling are established; exact resubmission/status/cancel/recovery repairs missing alarms for stored work;
+- store private request/candidate/audit bodies in private content-addressed/no-overwrite short-retention storage, not ordinary DO/log/status plaintext;
+- separate hosted attempt identity from Core idempotency identity; hosted identity binds repository/canonical-ref/request digest, while Core owns committed retry/conflict semantics;
+- isolate long-lived GitHub App key in private internal gateway; public API has no publication binding and ordinary runtime App permissions exclude Administration/Workflows;
+- serialize whole hosted finalization/audit/publication operation per repo while preserving ADR-003 committed-idempotency-before-stale ordering; stale work may need cold source preflight but stops before candidate/Index/package/audit once proven uncommitted;
+- run real Runethread Core/Git finalizer in attached Container; cold target at most one source clone/fetch, with reachable idempotency history retained and repository-controlled Git execution surfaces disabled;
+- every fresh finalization resets/reconstructs to direct observed canonical ref/revision before Core; never reuse unpromoted local candidate history as canonical evidence;
+- make finalization idempotent by persisting complete candidate evidence first and immutable attempt/generation-bound receipt last; a valid receipt wins, otherwise restart from canonical state;
+- let `ApplyMutation` preserve its own committed-retry-before-stale, Index write, validation, commit, and local-only fast-forward semantics once;
+- treat `NO_OP` as Core-validated terminal with no candidate/audit/publication;
+- separate request-local mutation failure from canonical repository/trust/compatibility/ref-binding failure; unhealthy canonical base fails closed at lane level;
+- bind candidate evidence to repository/canonical-ref/attempt/generation/idempotency/H0/C/tree/request/runtime/delivery/contract identities and digests;
+- audit exact C in fresh reduced-privilege Container/DO context, no repair/publication authority, with immutable generation-bound audit receipt;
+- persist deterministic audit disagreement as suspension/reconciliation before releasing active lane;
+- only repository DO may atomically transition `AUDITED -> PUBLISHING`, after rechecking current generation, cancellation, lane state, exact evidence, authorization, bound ref == H0, and barriers;
+- make cancellation vs publication a local atomic race: whichever terminal/PUBLISHING transition wins defines the boundary;
+- publish exact audited C only to the bound canonical ref through expected-old-revision non-force CAS; clone-free object publication requires exact-identity proof, otherwise exact-candidate push fallback;
+- after ambiguous publication, bound ref == C means committed, == H0 permits retry of same exact authorized publication, any other value means reconciliation;
+- after success confirm only bound ref == C; no redundant full validation cycle;
+- signed push webhooks are hints only and always trigger direct read of bound canonical ref;
+- distinguish proven uncommitted stale work from unexpected bound-ref movement during active operation;
+- use one Free/paid hosted architecture; paid ruleset protection is optional defense-in-depth;
+- version hosted release/protocol and treat incompatible Worker/Container/control/canonical-ref changes as barriers; no assumption of atomic provider rollout;
+- enforce explicit resource/private-data/log/retention limits and threat-model hosted plaintext processing;
+- keep project orientation/current-state prose outside atomic memory dual-write transaction;
+- remove push-on-every-normal-memory full Actions validation only through managed control-plane rollout;
+- measure acquisition/bytes/idempotency-stale/finalization/package/audit/publication/alarm/interleaving/provider startup latency and cost separately.
 
 ### Phase 2.6 architecture-freeze gate
 
-Before implementation begins, the exact current ADR/planning head must complete a fresh adversarial architecture review covering correctness, state ownership, concurrency, crash/retry behavior, privilege boundaries, deployment/version skew, privacy/resource limits, and avoidable latency/duplication.
+Before implementation begins, the exact current ADR/planning head must complete a fresh adversarial architecture review covering correctness, state ownership, component necessity, async interleaving, concurrency, crash/retry/ambiguous-response behavior, privilege boundaries, canonical-ref lifecycle, deployment/version skew, privacy/resource limits, and avoidable latency/duplication.
 
-The review passes only if it produces **zero required architecture or planning edits**. Any material correction, simplification, missing invariant, or changed implementation boundary must be recorded first and resets the gate; the full review is then repeated against the new exact head. Green CI or a previous review against an older head does not satisfy this gate.
+The review passes only if it produces **zero required architecture or planning edits**. Any material correction, simplification, missing invariant, or changed implementation boundary must be recorded first and resets the gate; the full review then repeats against the new exact head. Green CI or a review of an older head does not satisfy the gate.
 
-Prototype questions already explicitly delegated by accepted ADRs may remain open only when a safe invariant-preserving fallback exists and the architecture does not depend on guessing the result.
+Prototype questions may remain only when an accepted invariant-preserving fallback already exists and architecture does not depend on guessing the outcome.
 
-Installing or materially changing the hosted Phase 2.6 mechanism is itself a control-plane barrier. Roll it out through the full Core/hosted release/downstream process rather than using the new data-plane write path to install itself.
+Installing or materially changing hosted Phase 2.6 itself is a control-plane barrier and uses full Core/hosted release/downstream process.
 
-For the later Phase 3 MCP work, retain the existing rule that MCP is transport over MemoryService and the established delivery lifecycle. Phase 3 may expose both local/offline MemoryService and remote hosted memory delivery; re-check current authoritative MCP SDK/protocol/authentication requirements only when Phase 3 becomes current, and do not add MCP dependencies during Phase 2.6 merely because they are planned next.
+For Phase 3, MCP remains transport over MemoryService and the established delivery lifecycle. Re-check current MCP SDK/protocol/auth requirements only when Phase 3 becomes current; do not add MCP dependencies during Phase 2.6 merely because planned next.
 
-Any new evidence that changes repository semantics must still pass the normal contract and migration gates above rather than being smuggled into Phase 2.6 as a hosted-adapter detail.
+Any evidence that changes repository semantics still passes normal contract/migration gates rather than being smuggled in as hosted-adapter detail.
