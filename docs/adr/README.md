@@ -28,6 +28,9 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-011](ADR-011-runtime-contract-release-separation.md) | Runtime and contract release separation | Accepted |
 | [ADR-012](ADR-012-audited-candidate-memory-delivery.md) | Audited candidate promotion for external memory delivery | Accepted |
 | [ADR-013](ADR-013-per-repository-mutation-delivery-queue.md) | Per-repository serialized mutation-delivery queue | Accepted |
+| [ADR-014](ADR-014-cloud-hosted-memory-delivery-control-plane.md) | Cloud-hosted Phase 2.6 memory-delivery control plane | Accepted |
+
+ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
 
 ## ADR format
 
