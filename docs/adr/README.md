@@ -30,10 +30,13 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-013](ADR-013-per-repository-mutation-delivery-queue.md) | Per-repository serialized mutation-delivery queue | Accepted |
 | [ADR-014](ADR-014-cloud-hosted-memory-delivery-control-plane.md) | Cloud-hosted Phase 2.6 memory-delivery control plane | Accepted |
 | [ADR-015](ADR-015-project-current-state-projection-semantics.md) | Project current-state documents are asynchronous orientation projections in the next contract | Accepted |
+| [ADR-016](ADR-016-phase-2-6-hosted-trust-boundary-hardening.md) | Phase 2.6 hosted trust-boundary hardening | Accepted |
 
 ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
 
 ADR-015 records a required **next-contract** semantic change. Contract v8 remains immutable and continues to require relevant project current-state synchronization until a repository is explicitly migrated to the contract release implementing ADR-015.
+
+ADR-016 hardens the final Phase 2.6 hosted boundary. It makes the ADR-015 projection-capable contract a normal hosted-write admission prerequisite, separates finalizer/auditor evidence-write capabilities, pins live evidence against premature retention/GC, and replaces the unproven Worker-only REST-ref-CAS assumption with a concrete minimal Git publisher executor unless a future GitHub API proves true expected-old ref CAS. Where older ADR-014 project-view/publication wording conflicts with these constraints, ADR-016 controls.
 
 ## ADR format
 
