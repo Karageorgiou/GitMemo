@@ -29,8 +29,11 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-012](ADR-012-audited-candidate-memory-delivery.md) | Audited candidate promotion for external memory delivery | Accepted |
 | [ADR-013](ADR-013-per-repository-mutation-delivery-queue.md) | Per-repository serialized mutation-delivery queue | Accepted |
 | [ADR-014](ADR-014-cloud-hosted-memory-delivery-control-plane.md) | Cloud-hosted Phase 2.6 memory-delivery control plane | Accepted |
+| [ADR-015](ADR-015-project-current-state-projection-semantics.md) | Project current-state documents are asynchronous orientation projections in the next contract | Accepted |
 
 ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
+
+ADR-015 records a required **next-contract** semantic change. Contract v8 remains immutable and continues to require relevant project current-state synchronization until a repository is explicitly migrated to the contract release implementing ADR-015.
 
 ## ADR format
 
