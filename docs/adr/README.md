@@ -35,6 +35,7 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-018](ADR-018-indeterminate-publication-history-preservation.md) | Indeterminate publication preserves possible committed history | Accepted |
 | [ADR-019](ADR-019-control-plane-rollback-and-managed-support-hardening.md) | Control-plane rollback recovery and managed-support hardening | Accepted |
 | [ADR-020](ADR-020-independent-candidate-request-conformance.md) | Independent candidate-to-request conformance audit | Accepted |
+| [ADR-021](ADR-021-independent-terminal-success-verification.md) | Independent verification of terminal-success mutation results | Accepted |
 
 ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
 
@@ -49,6 +50,8 @@ ADR-018 closes the remaining indeterminate-publication/history gap. A candidate 
 ADR-019 makes destructive hosted-state rollback explicit. A rollback-independent append-only safety journal in the existing private evidence boundary preserves accepted promises, cancellation decisions, accepted canonical anchors, and publication intents across Durable Object PITR/recreation without becoming a second live state machine. It also requires immutable full-SHA pins in the retained managed private-memory Actions workflow and makes the v9 support/README migration agree with ADR-015 without silently overwriting customized support files. Where older ADR-014 through ADR-018 wording assumes forward-only Durable Object storage, ADR-019 controls recovery.
 
 ADR-020 strengthens the independent prepublication audit. Candidate validity, parent/request metadata, fresh indexes, and path scope are not enough to prove the finalizer actually applied the sealed request. Before exact `C` can be published, a fresh auditor must use Core-owned mutation semantics against exact `H0` + the immutable sealed request to prove the candidate's semantic bytes and Core mutation metadata conform to that request. This remains a second execution of the same Core semantics rather than a second semantic implementation.
+
+ADR-021 closes the remaining finalizer-result bypass around ADR-020. `NO_OP` and `ALREADY_COMMITTED` are successful terminal semantic claims which can skip candidate publication, so a finalizer receipt alone cannot make them authoritative. Before either result becomes durable client-visible success or releases the lane, a fresh reduced-privilege Core/repository verification must independently prove the exact no-op or canonical committed-idempotency result and bind it in immutable rollback-recoverable terminal-success evidence. Unsuccessful/stale execution results do not require equivalent semantic replay because the architecture does not claim availability against a compromised finalizer.
 
 ## ADR format
 
