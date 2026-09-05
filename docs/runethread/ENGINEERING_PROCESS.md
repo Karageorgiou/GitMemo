@@ -438,13 +438,13 @@ A deliberate stop is a successful safety outcome, not a failure of progress.
 
 ## 20. Current Phase 2.6 application
 
-Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, runtime-release / contract-release separation is part of the compatibility model, and ADR-012 through ADR-019 are accepted.
+Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, runtime-release / contract-release separation is part of the compatibility model, and ADR-012 through ADR-020 are accepted.
 
 Phase 2.6 Memory Write Delivery Pipeline is the current milestone. Phase 3 MCP implementation is blocked until Phase 2.6 satisfies issue #20.
 
 For Phase 2.6 work:
 
-- start from freshly verified `main` and ADR-012/ADR-013 invariants as amended/qualified by ADR-014 through ADR-019;
+- start from freshly verified `main` and ADR-012/ADR-013 invariants as amended/qualified by ADR-014 through ADR-020;
 - treat the contract-v9 migration implementing ADR-015 as the first implementation prerequisite after architecture freeze; normal hosted mutation admission MUST reject contract-v8 repositories rather than silently omitting v8-required project current-state synchronization;
 - transition the Runethread-managed memory-repository validation workflow through the released starter/upgrader/template/private-repository migration, preferably in the same v9 release sequence; remove redundant normal-push triggering, pin every retained external `uses:` Action to a verified full-length commit SHA, preserve exact prior managed workflow recognition, and never silently overwrite customized/unrecognized workflow state;
 - align generated/current support prose with ADR-015 during the same v9 migration: project current-state/overview prose is an orientation/materialized view rather than a canonical source, project-view user bytes remain preserved, and automatic README replacement is limited to exact recognized prior managed README state rather than a broad heading/lock heuristic;
@@ -473,7 +473,9 @@ For Phase 2.6 work:
 - treat `NO_OP` as Core-validated terminal with no candidate/audit/publication;
 - separate request-local mutation failure from canonical repository/trust/compatibility/ref-binding failure; unhealthy canonical base fails closed at lane level;
 - bind candidate evidence to repository/canonical-ref/attempt/generation/idempotency/H0/C/tree/request/runtime/delivery/contract identities and digests;
-- audit exact C in fresh reduced-privilege Container/DO context, no repair/publication authority, with immutable generation-bound audit receipt; finalizer must be unable to manufacture that authoritative audit receipt;
+- audit exact C in a fresh reduced-privilege Container/DO context and independently prove request-to-candidate conformance under ADR-020: derive the expected semantic memory changes from exact immutable sealed request + exact H0 using the same pinned Core mutation semantics (or a Core-owned equivalent verifier), compare them to candidate C, then also require exact parent/binding/scope, hard validation, strict Index v2 freshness, and no unauthorized unrelated/control-plane changes; a finalizer-supplied expected diff or manifest is never conformance authority;
+- permit only disposable local scratch writes needed by the Core-owned conformance verifier; the auditor never repairs candidate C, never replaces its evidence, and has no canonical Git publication authority;
+- bind the immutable generation-bound audit receipt to exact request digest/fingerprint, H0, C/tree, independently derived conformance result, and pinned release/runtime identities; finalizer must be unable to manufacture that authoritative audit receipt;
 - persist deterministic audit disagreement as suspension/reconciliation before releasing active lane;
 - only repository DO may atomically transition `AUDITED -> PUBLISHING`, after rechecking current generation, cancellation, lane state, exact evidence, authorization, directly observed private visibility, bound ref == H0, and barriers;
 - make cancellation vs publication a local atomic race: whichever cancellation-claim/PUBLISHING transition wins defines the boundary, with ADR-019 external safety evidence required before a cancellation is durably released;
@@ -492,14 +494,14 @@ For Phase 2.6 work:
 - ordinary reconciliation may adopt an out-of-band new canonical revision only if no protected publication anchor blocks it, the last accepted revision remains its ancestor, and the exact new revision passes trust/repository/index plus mutation/idempotency-history integrity checks; backward/sideways non-descendant rewrites or sibling descendants excluding a proven/possible C remain reconciliation-required until ancestry-preserving recovery, because Core committed-idempotency evidence lives in reachable Git history;
 - treat observed non-private visibility as suspension/privacy-incident state and require explicit revalidation before resume; document that repository owners/admins remain able to change visibility outside the Git-ref CAS and Runethread does not claim atomic visibility+ref locking without Administration authority;
 - use one Free/paid hosted architecture; paid ruleset protection is optional defense-in-depth;
-- version hosted release/protocol and treat incompatible Worker/DO/Container/evidence/publisher/reconciliation/privacy/managed-bootstrap/canonical-ref/safety-journal/recovery changes as barriers; no assumption of atomic provider rollout;
+- version hosted release/protocol and treat incompatible Worker/DO/Container/evidence/publisher/reconciliation/privacy/managed-bootstrap/canonical-ref/safety-journal/recovery/audit-conformance changes as barriers; no assumption of atomic provider rollout;
 - enforce explicit resource/private-data/log/retention limits and threat-model hosted plaintext processing plus minimized safety-journal retention/deletion;
 - after contract-v9 migration, keep project orientation/current-state prose outside atomic memory dual-write transaction;
-- measure acquisition/bytes/idempotency-stale/finalization/package/audit/publication/publisher-or-API-path/fencing/journal-recovery/alarm/interleaving/provider startup latency and cost separately.
+- measure acquisition/bytes/idempotency-stale/finalization/package/request-conformance-audit/publication/publisher-or-API-path/fencing/journal-recovery/alarm/interleaving/provider startup latency and cost separately.
 
 ### Phase 2.6 architecture-freeze gate
 
-Before implementation begins, the exact current ADR/planning head must complete a fresh adversarial architecture review covering correctness, contract compatibility, state ownership, component necessity, async interleaving, concurrency, crash/retry/ambiguous-response behavior, destructive Durable Object rollback/recreation, privilege/evidence-authority boundaries, evidence and safety-journal retention, publisher-capability lifetime, exact remote publication, proven/possible publication-history preservation, accepted-history reconciliation, repository visibility/privacy, canonical-ref lifecycle, managed-bootstrap/support rollout, workflow supply-chain immutability, deployment/version skew, resource limits, and avoidable latency/duplication.
+Before implementation begins, the exact current ADR/planning head must complete a fresh adversarial architecture review covering correctness, contract compatibility, state ownership, component necessity, async interleaving, concurrency, crash/retry/ambiguous-response behavior, destructive Durable Object rollback/recreation, privilege/evidence-authority boundaries, evidence and safety-journal retention, independent request-to-candidate conformance, publisher-capability lifetime, exact remote publication, proven/possible publication-history preservation, accepted-history reconciliation, repository visibility/privacy, canonical-ref lifecycle, managed-bootstrap/support rollout, workflow supply-chain immutability, deployment/version skew, resource limits, and avoidable latency/duplication.
 
 The review passes only if it produces **zero required architecture or planning edits**. Any material correction, simplification, missing invariant, or changed implementation boundary must be recorded first and resets the gate; the full review then repeats against the new exact head. Green CI or a review of an older head does not satisfy the gate.
 
@@ -509,7 +511,9 @@ The next full review, explicitly started against synchronized head `0a1ea0b87110
 
 The following full review, explicitly started against synchronized head `a9e6db2f72c8d450753c5e70e4eea5eea2d78565`, found the indeterminate-publication/history-erasure race and produced ADR-018. It therefore also failed the zero-edit gate.
 
-The current full review, explicitly started against synchronized head `0f7f95c8220d16121144de5d1c1a4f42978550bd`, found material destructive-control-plane-recovery and managed-support/security corrections and produced ADR-019. **It therefore also fails the zero-edit gate.** No additional attack review is started in the same prompt after these edits. Implementation remains blocked until a later explicitly requested full review of the new exact synchronized head passes with zero edits.
+The next full review, explicitly started against synchronized head `0f7f95c8220d16121144de5d1c1a4f42978550bd`, found material destructive-control-plane-recovery and managed-support/security corrections and produced ADR-019. It therefore also failed the zero-edit gate.
+
+The current full review, explicitly started against synchronized head `4dbdef5c08142856ba1795544795cea254193398`, found that candidate validity/binding/scope did not independently prove the candidate's in-scope semantic bytes were derived from the exact sealed request. ADR-020 therefore requires a Core-owned request-to-candidate conformance proof in the fresh audit. **This review also fails the zero-edit gate.** No additional attack review is started in the same prompt after these edits. Implementation remains blocked until a later explicitly requested full review of the new exact synchronized head passes with zero edits.
 
 Prototype questions may remain only when an accepted invariant-preserving fallback already exists and architecture does not depend on guessing the outcome. The current GraphQL expected-old ref path is such a delegated prototype because the exact Git-protocol publisher remains a safe fallback until exact candidate-object identity and App-permission behavior are proven by integration tests.
 
