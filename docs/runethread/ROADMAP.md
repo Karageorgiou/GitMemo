@@ -139,13 +139,16 @@ Governing decisions:
 - ADR-013 — per-repository serialized mutation-delivery queue;
 - ADR-014 — Cloud-hosted Phase 2.6 memory-delivery control plane;
 - ADR-015 — project current-state documents become asynchronous orientation projections only in the next operational contract;
-- ADR-016 — hosted contract eligibility, evidence capability/retention, and exact-publication hardening.
+- ADR-016 — hosted contract eligibility, evidence capability/retention, and exact-publication hardening;
+- ADR-017 — accepted-history reconciliation, private-repository eligibility, publisher-capability fencing, and managed validation-bootstrap rollout.
 
-### Contract prerequisite
+### Contract and managed-bootstrap prerequisite
 
 Contract v8 remains immutable and requires relevant project current-state synchronization as part of memory-write completion. Current `MemoryService.ApplyMutation` does not implement that project-view semantic write. Therefore, after the architecture-freeze gate passes, the first implementation slice is the ADR-015 contract transition (target contract v9), exact v8 fixture/migration/release verification, template migration, and private-repository migration.
 
-Normal hosted Phase 2.6 mutation is admitted only after the repository is explicitly migrated to the projection-capable contract implementing ADR-015, or a later contract explicitly supported by the hosted release. Contract-v8 repositories may be read, verified, reconciled, and upgraded, but the normal hosted mutation path does not silently bypass the v8 synchronization rule.
+That same released migration sequence must deliberately transition the Runethread-managed `.github/workflows/validate.yml`: the starter/upgrader owns that support/bootstrap file even though it is outside `ContractPaths()` and the trust-lock digest. The exact old managed workflow remains a supported migration source; customized/unrecognized workflow state is not silently overwritten. Normal hosted canonical pushes must no longer trigger Runethread's redundant full push validation before hosted writes are enabled.
+
+Normal hosted Phase 2.6 mutation is admitted only after the repository is explicitly migrated to the projection-capable contract implementing ADR-015, or a later contract explicitly supported by the hosted release, **and** the repository has the supported managed validation-bootstrap state. Contract-v8 repositories may be read, verified, reconciled, and upgraded, but the normal hosted mutation path does not silently bypass the v8 synchronization rule.
 
 Target topology:
 
@@ -195,18 +198,18 @@ minimal Git publisher executor
       |
 exact expected-old H0 -> exact audited C
       |
-user-owned GitHub canonical branch ref
+user-owned private GitHub canonical branch ref
 ```
 
 Primary work:
 
 - authenticated request/status/cancel API plus explicit caller-to-App-installation repository authorization;
-- explicit repository binding to immutable repository identity + App installation + canonical branch ref + last accepted revision, normally discovering the ref from default branch at adoption but never silently following later ref/default changes;
+- explicit repository binding to immutable repository identity + App installation + canonical branch ref + last accepted revision, normally discovering the ref from default branch at adoption but never silently following later ref/default changes; directly observed private visibility is a live hosted-write eligibility condition;
 - private sealed request bodies stored as content-addressed/no-overwrite objects, with only opaque references/digests in DO state/logs/status;
 - role-scoped evidence creation so admission/finalizer/auditor can create only their exact artifact class/key for the current repository/attempt/phase/generation under digest/size/create-if-absent constraints; finalizer cannot manufacture authoritative audit evidence and auditor cannot replace finalization evidence;
 - referenced evidence remains live for queued/active/retrying/audited/publishing/reconciling operations; ordinary provider TTL/GC applies only after the operation no longer depends on it and the bounded recovery/incident window permits deletion;
 - separate hosted attempt identity from Core idempotency identity; hosted identity binds repo/canonical-ref/request digest while Core owns semantic committed retry/conflict;
-- one repository DO as sole hosted lane/operation-state/publication-authorization authority, with transactional SQLite for bounded queue, one active op, exact phase/execution generation, retry/backoff/deadline state, evidence refs, canonical-ref binding, suspension/maintenance/reconciliation;
+- one repository DO as sole hosted lane/operation-state/publication-authorization authority, with transactional SQLite for bounded queue, one active op, exact phase/execution generation, retry/backoff/deadline state, evidence refs, canonical-ref binding, private-visibility eligibility, publisher-attempt/fencing state, suspension/maintenance/reconciliation;
 - no Cloudflare Workflow in v1; one DO alarm is the at-least-once scheduler/recovery wakeup and the state driver explicitly persists/reschedules prolonged retryable failure;
 - explicit async-interleaving protocol: local atomic phase+generation claim before every Container/object-store/GitHub external action, external I/O outside `blockConcurrencyWhile()`, and compare operation/phase/generation before accepting result; stale-generation output cannot advance state;
 - durable acceptance handoff: return `ACCEPTED` only after request/operation metadata and a recoverable alarm are established; exact resubmission/status/recovery repairs missing alarms;
@@ -224,40 +227,46 @@ Primary work:
 - candidate transport selected by measured exact bytes/runtime; prototype Git-native H0->C delta against self-contained package and prove completeness under partial-clone/promisor modes;
 - fresh reduced-privilege audit of exact C with bounded exact-base acquisition, hard validation, strict Index v2 freshness, binding/scope checks, no repair/publication privilege;
 - immutable generation-bound audit receipt, with deterministic audit failure durably suspending/reconciling lane before release;
-- DO-only `AUDITED -> PUBLISHING` authorization after current generation, cancellation, lane, evidence, App/repo/canonical-ref auth, direct bound-ref==H0, and barrier checks;
+- DO-only `AUDITED -> PUBLISHING` authorization after current generation, cancellation, lane, evidence, App/repo/canonical-ref auth, directly observed private visibility, direct bound-ref==H0, and barrier checks;
 - cancellation-vs-publication linearized by local atomic state transition; once PUBLISHING wins, cancellation is too late and exact Git outcome decides;
+- before publisher/token external I/O, durably create one exact publisher-attempt identity bound to repository/ref/H0/C/operation/generation/evidence/protocol and a bounded deadline;
 - only after durable `PUBLISHING`, private App gateway mints a short-lived one-repository minimum Contents-write installation token to a minimal trusted publisher executor;
-- publisher executor receives only exact audited Git objects + H0 + C + bound ref + narrow token, performs no source clone/semantic mutation/repair/audit, never constructs C2, and attempts only an expected-old Git-protocol update from exact H0 to exact C;
+- publisher executor receives only exact audited Git objects + H0 + C + bound ref + narrow token, performs no source clone/semantic mutation/repair/audit, never constructs C2, performs at most one expected-old Git-protocol update for that publisher-attempt identity, and has no autonomous retry loop;
 - the currently documented GitHub REST reference update with `force=false` is not accepted as proof of exact expected-old CAS; clone-free/API publication may replace the publisher executor only after authoritative documentation and integration tests prove exact C identity and atomic old-ref==H0 semantics;
-- ambiguous publication response resolved by bound-ref state: C = committed, H0 = retry same exact authorized publication, anything else = reconciliation;
-- cheap post-CAS bound-ref==C confirmation, no redundant full validation;
-- signed push webhooks only as hints; always reread bound canonical ref and never mutate accepted state from payload alone;
+- `PUBLISHING` remains capability-bearing/in-doubt until every issued publisher executor/token for the logical publication is fenced: clean completion must prove expected executor termination/token-disposal policy, while ambiguous loss stops/destroys the executor and conservatively waits for unconfirmed token expiry before lane release or a new publisher attempt;
+- only after prior publisher capability is fenced does bound-ref observation resolve publication: C = committed, H0 = DO-authorized retry of the same logical publication with a new tracked publisher attempt, anything else = reconciliation;
+- cheap post-publication bound-ref==C confirmation, no redundant full validation;
+- signed push and repository-visibility webhooks only as hints; always reread authoritative current GitHub state and never mutate accepted state from payload alone;
 - proven uncommitted stale work -> `NEEDS_REPREPARE`; unexpected active-operation ref movement -> reconciliation;
+- ordinary out-of-band adoption requires the last accepted canonical revision to remain an ancestor of the proposed new accepted revision plus exact trust/repository/index/mutation-idempotency-history checks; backward/sideways non-descendant rewrites remain reconciliation-required until ancestry-preserving recovery because Core committed-idempotency evidence is reachable Git history;
+- observed non-private visibility suspends/fails closed for normal hosted writes and requires explicit revalidation before later resume; threat-model documentation states that an authorized GitHub owner/admin can change visibility outside the Git-ref CAS and Runethread does not claim atomic visibility+ref locking without Administration authority;
 - one hosted implementation for Free/paid private GitHub, with paid branch/ruleset protection optional defense-in-depth;
-- explicit release/protocol versioning and non-atomic Worker/DO/finalizer/auditor/evidence/publisher/canonical-ref deployment handling using maintenance/drain or versioned blue/green;
+- explicit release/protocol versioning and non-atomic Worker/DO/finalizer/auditor/evidence/publisher/reconciliation/privacy/managed-bootstrap/canonical-ref deployment handling using maintenance/drain or versioned blue/green;
 - operation outcomes `NO_OP`, `ALREADY_COMMITTED`, `NEEDS_REPREPARE`, finalization/audit/cancel/reconciliation plus lane OPEN/SUSPENDED/MAINTENANCE;
-- control-plane barriers for contract/schema/trust/repository-format/bootstrap/delivery/migration/evidence/publication/canonical-ref binding changes;
+- control-plane barriers for contract/schema/trust/repository-format/bootstrap/delivery/migration/evidence/publication/reconciliation/privacy/canonical-ref binding changes;
 - request/rate/repository/artifact/Container/retry/operation-history/log/private-data retention limits and threat model;
 - project current-state/overview prose treated as materialized orientation views only after the ADR-015 contract migration, not as an implicit contract-v8 relaxation;
-- remove push-on-every-normal-memory full Actions validation through managed rollout, retaining only distinct health/recovery/migration/PR/control-plane checks;
-- measure cold/warm source, bytes, idempotency/stale preflight, finalization, package, audit, publication, publisher-executor startup, alarm/retry/interleaving, provider startup, total latency/cost.
+- remove push-on-every-normal-memory full Actions validation only through the released starter/upgrader/template/private-repository migration, retaining distinct health/recovery/migration/PR/control-plane checks;
+- measure cold/warm source, bytes, idempotency/stale preflight, finalization, package, audit, publication, publisher-executor startup/fencing, alarm/retry/interleaving, provider startup, total latency/cost.
 
 ### Pre-implementation architecture-freeze gate
 
-Before implementation begins, exact current ADR/planning state must complete a fresh adversarial review covering correctness, contract compatibility, state ownership/component necessity, async interleaving, concurrency, crash/retry/ambiguous response, privilege/evidence-authority boundaries, evidence liveness/retention, exact publication, canonical-ref lifecycle, deployment/version skew, privacy/resource limits, and avoidable duplication/latency.
+Before implementation begins, exact current ADR/planning state must complete a fresh adversarial review covering correctness, contract compatibility, state ownership/component necessity, async interleaving, concurrency, crash/retry/ambiguous response, privilege/evidence-authority boundaries, evidence liveness/retention, publisher-capability lifetime, exact publication, accepted-history reconciliation, repository visibility/privacy, canonical-ref lifecycle, managed-bootstrap rollout, deployment/version skew, resource limits, and avoidable duplication/latency.
 
 The review passes only with **zero required architecture/planning edits**. Any material correction/simplification/missing invariant/changed boundary is recorded first and resets the gate; full review repeats against the new exact head. Prototype questions may remain only with accepted safe invariant-preserving fallback.
 
-The attack review completed on 2026-09-05 against pre-amendment head `68549677e0fbb76b0018ce3aaa574c1d1ba4e1bb` found material changes and produced ADR-016 plus synchronized planning edits. It therefore **failed** the zero-edit freeze gate. Per the explicit instruction for that cycle, no fresh attack run starts automatically after the edits; implementation remains blocked until a later explicitly requested full review of the new exact head passes with zero edits.
+The attack review completed on 2026-09-05 against pre-amendment head `68549677e0fbb76b0018ce3aaa574c1d1ba4e1bb` found material changes and produced ADR-016 plus synchronized planning edits. It failed the zero-edit freeze gate.
+
+The subsequent full attack review, explicitly started against synchronized head `0a1ea0b871105d6497754fbbee93a387cb2494b4`, found material changes and produced ADR-017 plus synchronized planning edits. **It also fails the zero-edit freeze gate.** Per the explicit instruction for this cycle, no further review run is started in the same prompt after these edits; implementation remains blocked until a later explicitly requested full review of the new exact synchronized head passes with zero edits.
 
 Phase 2.6 v1 deliberately uses singleton operations. Deferred: semantic dependency quantification, batching/coalescing, automatic semantic re-preparation, general AI task orchestration, and project-orientation refresh machinery beyond the ADR-015 correctness semantics.
 
 Exit criteria are tracked in issue #20. At minimum:
 
 - zero-edit architecture-freeze review recorded on the exact final planning head before implementation;
-- contract-v8 repository is not admitted for normal hosted mutation and supported migration to the ADR-015 contract is verified first;
+- contract-v8 repository is not admitted for normal hosted mutation and supported migration to the ADR-015 contract plus supported managed validation-bootstrap state is verified first;
 - remote authenticated caller submits sealed mutation without canonical file editing/GitHub write credential;
-- repository/App/canonical-ref auth cannot be gained by guessed identifiers;
+- repository/App/canonical-ref auth cannot be gained by guessed identifiers and directly observed non-private visibility blocks normal hosted writes;
 - Free/protected paid private repos use same hosted mutation path;
 - hosted provider code outside Core, exact pinned runtime/container/protocol identities;
 - one repository DO is sole lane/state/publication-authorization authority, no second Workflow state machine;
@@ -272,16 +281,18 @@ Exit criteria are tracked in issue #20. At minimum:
 - MemoryService builds exact C, writes Index once, hard-validates, leaves remote canonical ref H0 before audit;
 - private request/candidate/audit data does not leak in ordinary metadata/log/status;
 - fresh auditor verifies exact C/strict index/scope without repair/publication authority;
-- only repository DO can authorize publication after exact evidence/cancel/lane/auth/ref checks;
+- only repository DO can authorize publication after exact evidence/cancel/lane/auth/ref/private-visibility checks;
 - default/canonical-branch rename/change/deletion/transfer fails closed rather than silently redirects;
+- ordinary reconciliation never adopts a non-descendant rewrite that loses last accepted canonical/idempotency history;
 - long-lived App key remains gateway-only and publisher receives only a short-lived one-repo minimum write token after PUBLISHING;
-- publisher executor performs no second source clone and changes only exact bound ref H0->exact audited C through a true expected-old Git update;
+- publisher executor performs no second source clone, performs at most one push per tracked attempt, and changes only exact bound ref H0->exact audited C through a true expected-old Git update;
+- lane cannot leave publication in-doubt while an old publisher executor/token can still act; obsolete publisher cannot reapply C after a later rewind to H0;
 - forward/sideways/backward/deleted/recreated ref races cannot be overwritten as if H0 still held;
-- ambiguous publication and webhook/order failures reconcile deterministically;
-- deployment/version barriers prevent mixed incompatible finalizer/auditor/evidence/publisher semantics;
+- ambiguous publication and webhook/order failures reconcile deterministically after capability fencing;
+- deployment/version barriers prevent mixed incompatible finalizer/auditor/evidence/publisher/reconciliation/privacy/managed-bootstrap semantics;
 - resource/provider/privacy failures leave canonical Git unchanged;
 - local/offline MemoryService remains Cloudflare-independent;
-- push-on-every-memory Actions validation removed from normal hosted data plane through managed rollout;
+- push-on-every-memory Actions validation removed from normal hosted data plane through the released managed migration;
 - real private-repo rollout and measured latency/cost prove redundant work removed without deleting distinct trust boundaries.
 
 Hosted Runethread infrastructure account requires Workers Paid because Containers are needed; this is not an end-user Cloudflare-plan requirement.
@@ -460,6 +471,6 @@ Possible future work:
 
 The immediate milestone is **Phase 2.6 — Memory Write Delivery Pipeline**.
 
-> Finish the pre-implementation architecture freeze, then implement the ADR-015 contract migration followed by the Cloudflare-hosted, audited, per-repository mutation-delivery path defined by ADR-012 through ADR-016. Normal hosted writes begin only on an explicitly compatible migrated contract, independent audit uses role-separated immutable evidence, and canonical publication uses exact audited candidate objects plus a true expected-old Git update. This attack cycle found material edits, so implementation remains blocked until a later zero-edit full review of the new exact planning head passes.
+> Finish the pre-implementation architecture freeze, then implement the ADR-015 contract + managed-bootstrap migration followed by the Cloudflare-hosted, audited, per-repository mutation-delivery path defined by ADR-012 through ADR-017. Normal hosted writes begin only on an explicitly compatible migrated private repository, ordinary reconciliation preserves accepted Git/idempotency history, independent audit uses role-separated immutable evidence, and canonical publication uses exact audited candidate objects plus a true expected-old Git update with publisher-capability fencing. The review against `0a1ea0b8…` found material edits, so implementation remains blocked until a later zero-edit full review of the new exact planning head passes.
 
 Only after Phase 2.6 exits green should Phase 3 MCP implementation begin.
