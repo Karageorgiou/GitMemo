@@ -143,7 +143,8 @@ Governing decisions:
 - ADR-017 — accepted-history reconciliation, private-repository eligibility, publisher-capability fencing, and managed validation-bootstrap rollout;
 - ADR-018 — proven/possible publication-history preservation across ambiguous completion and out-of-band rewrites;
 - ADR-019 — rollback-independent recovery evidence, destructive-restore barriers, immutable managed-workflow Action pins, and v9 managed-support authority alignment;
-- ADR-020 — independent candidate-to-request semantic conformance before publication.
+- ADR-020 — independent candidate-to-request semantic conformance before publication;
+- ADR-021 — independent verification of successful terminal no-candidate mutation results.
 
 ### Contract and managed-support prerequisite
 
@@ -172,7 +173,7 @@ runethread/hosted
   attached finalizer Containers
   private role-scoped evidence boundary/storage
     + append-only rollback-independent safety journal
-  fresh auditor Container/DO contexts
+  fresh auditor/verifier Container/DO contexts
   private GitHub App gateway
   exact-CAS publication path, with minimal Git publisher fallback
 ```
@@ -193,16 +194,17 @@ repository-runtime Durable Object
       |
 attached finalizer Container
       |
-role-scoped immutable candidate/finalization evidence
+role-scoped immutable finalization/candidate evidence
       |
-fresh reduced-privilege auditor
-  Core-owned H0 + sealed-request -> C conformance proof
+fresh reduced-privilege auditor/verifier
+  candidate: Core-owned H0 + sealed-request -> C conformance proof
+  terminal success: Core/repository NO_OP or ALREADY_COMMITTED proof
       |
-role-scoped immutable audit evidence
+role-scoped immutable audit/terminal-success evidence
       |
-repository DO authorizes PUBLISHING
+repository DO authorizes terminal success or PUBLISHING
       |
-rollback-independent publication intent recorded
+rollback-independent publication intent recorded before write-capable I/O
       |
 private GitHub App gateway
       |
@@ -220,32 +222,36 @@ Primary work:
 - authenticated request/status/cancel API plus explicit caller-to-App-installation repository authorization;
 - explicit repository binding to immutable repository identity + App installation + canonical branch ref + last accepted revision, normally discovering the ref from default branch at adoption but never silently following later ref/default changes; directly observed private visibility is a live hosted-write eligibility condition;
 - private sealed request bodies stored as content-addressed/no-overwrite objects, with only opaque references/digests in DO state/logs/status;
-- role-scoped evidence creation so admission/finalizer/auditor can create only their exact artifact class/key for the current repository/attempt/phase/generation under digest/size/create-if-absent constraints; finalizer cannot manufacture authoritative audit evidence and auditor cannot replace finalization evidence;
+- role-scoped evidence creation so admission/finalizer/auditor-verifier can create only their exact artifact class/key for the current repository/attempt/phase/generation under digest/size/create-if-absent constraints; finalizer cannot manufacture authoritative candidate-audit or terminal-success-verification evidence and auditor/verifier cannot replace finalization evidence;
 - one repository DO remains the sole **live** hosted lane/operation-state/publication-authorization authority, with transactional SQLite for bounded queue, one active op, exact phase/execution generation, retry/backoff/deadline state, evidence refs, canonical-ref binding, private-visibility eligibility, publisher-attempt/fencing state, protected publication anchors, safety-journal checkpoint/binding epoch, suspension/maintenance/reconciliation;
-- the existing private evidence-storage boundary also carries a minimized append-only rollback-independent safety journal rather than a second queue/state machine. Binding/enrollment, client-visible acceptance, cancellation wins, accepted canonical anchors, publication intents/outcomes, and required immutable receipt references are create-if-absent/digest-bound and contain no plaintext memory bodies or credentials;
-- Durable Object PITR/recreation/detected state rollback is an exclusive maintenance/recovery barrier, not an ordinary retry. A restored/recreated DO must reconcile its journal checkpoint/epoch, immutable evidence, current GitHub binding/privacy, accepted operations/cancellations, protected publication anchors, and possibly-issued publication capabilities before normal admission/publication resumes;
+- the existing private evidence-storage boundary also carries a minimized append-only rollback-independent safety journal rather than a second queue/state machine. Binding/enrollment, client-visible acceptance, cancellation wins, accepted canonical anchors, publication intents/outcomes, required immutable receipt references, and independently verified terminal-success receipt references/result identities are create-if-absent/digest-bound and contain no plaintext memory bodies or credentials;
+- Durable Object PITR/recreation/detected state rollback is an exclusive maintenance/recovery barrier, not an ordinary retry. A restored/recreated DO must reconcile its journal checkpoint/epoch, immutable evidence, current GitHub binding/privacy, accepted operations/cancellations, protected publication anchors, terminal-success evidence, and possibly-issued publication capabilities before normal admission/publication resumes;
 - missing/corrupt/forked rollback-independent safety evidence fails closed rather than silently creating a fresh empty runtime for a repository known to have an existing binding epoch;
 - no Cloudflare Workflow in v1; one DO alarm is the at-least-once scheduler/recovery wakeup and the state driver explicitly persists/reschedules prolonged retryable failure;
 - explicit async-interleaving protocol: local atomic phase+generation claim before every Container/object-store/GitHub external action, external I/O outside `blockConcurrencyWhile()`, and compare operation/phase/generation before accepting result; stale-generation output cannot advance state;
 - durable acceptance handoff: return `ACCEPTED` only after request/operation metadata, a recoverable alarm, and rollback-independent acceptance evidence are established; exact resubmission/status/recovery repairs missing alarms for ordinary stored work while destructive rollback enters the recovery barrier;
 - rollback-sensitive cancellation and accepted-anchor adoption are write-ahead recoverable: a local winning transition is not exposed/released as durably final until the corresponding immutable safety record exists;
-- referenced request/candidate/finalization/audit/publication evidence remains live while needed by queued/active/retrying/audited/publishing/reconciling work, including ADR-018 protected candidates; private content may expire after its safe terminal window, while minimized safety-journal history required by an active binding epoch remains until explicit safe binding deletion/rebaseline policy permits removal;
+- referenced request/candidate/finalization/audit/terminal-verification/publication evidence remains live while needed by queued/active/retrying/audited/publishing/reconciling work, including ADR-018 protected candidates; private content may expire after its safe terminal window, while minimized safety-journal history required by an active binding epoch remains until explicit safe binding deletion/rebaseline policy permits removal;
 - separate hosted attempt identity from Core idempotency identity; hosted identity binds repo/canonical-ref/request digest while Core owns semantic committed retry/conflict;
 - Container/DO relationship used so repository runtime manages attached finalizer lifecycle rather than another coordinator;
-- private internal GitHub gateway retains the long-lived App private key; public API, finalizer, auditor, evidence storage, and publisher executor never receive that key; ordinary runtime App baseline is Contents/Metadata without Administration/Workflows;
+- private internal GitHub gateway retains the long-lived App private key; public API, finalizer, auditor/verifier, evidence storage, and publisher executor never receive that key; ordinary runtime App baseline is Contents/Metadata without Administration/Workflows;
 - full hosted operation serialized per repo while preserving ADR-003 committed-idempotency-before-stale ordering; stale work may require cold source preflight but stops before candidate/Index/package/audit once proven uncommitted;
 - finalizer runs exact pinned Runethread Go/Core + Git; cold source target at most one clone/fetch with historical idempotency reachable, optional warm cache only after direct canonical-ref reset;
 - hardened Git policy disabling/refusing hooks, recursive submodules, filters, unsafe config/includes, credential helpers, and similar repository-controlled execution;
 - every fresh finalization starts from directly observed bound canonical ref/revision, never surviving unpromoted local candidate history;
-- immutable generation-bound finalization receipt: candidate evidence first, receipt last, create-if-absent/no-overwrite, valid receipt wins retries while missing receipt causes restart from canonical state;
+- immutable generation-bound finalization receipt: candidate evidence first, receipt last, create-if-absent/no-overwrite; a valid receipt selects the finalizer's claimed result but does not by itself make a success-like terminal result authoritative;
 - finalization via existing `MemoryService.ApplyMutation`, preserving committed-retry-before-stale, one Index v2 write, hard validation, commit creation, local-only fast-forward;
-- Core-validated `NO_OP` terminal path with no candidate/audit/publication;
+- candidate-producing success requires ADR-020 fresh request-to-candidate conformance plus all existing exact parent/trust/index/scope checks before publication;
+- claimed `NO_OP` requires fresh reduced-privilege Core verification of exact immutable sealed request + exact H0 before durable client-visible terminal success/lane release; a finalizer cannot bypass candidate audit by falsely declaring no-op;
+- claimed `ALREADY_COMMITTED` requires fresh reduced-privilege Core/repository committed-idempotency lookup against directly observed accepted canonical history for the exact request, preserving committed-idempotency-before-stale ordering and proving exact request fingerprint/mutation metadata before durable client-visible terminal success/lane release;
+- immutable role-separated terminal-success receipt binds exact repository/ref/request/attempt/generation/release plus independently proven result/canonical evidence; finalizer cannot author it, and its minimal receipt reference/result identity is established in rollback-independent recovery evidence before terminal success releases the lane;
+- unsuccessful/stale finalizer results remain generation-bound/fail-closed but do not require equivalent independent semantic replay solely to defend against denial of service by a compromised finalizer;
 - canonical repository/trust/compatibility/ref-binding failure separated from request-local mutation failure;
 - candidate evidence bound to repo/canonical-ref/H0/C/tree/parent/Core-idempotency/request fingerprint/hosted attempt+generation/runtime/container/delivery/contract identities/digests;
 - candidate transport selected by measured exact bytes/runtime; prototype Git-native H0->C delta against self-contained package and prove completeness under partial-clone/promisor modes;
 - fresh reduced-privilege audit of exact C with bounded exact-base acquisition: independently derive the expected semantic mutation from exact immutable sealed request + exact H0 through the same pinned Core mutation semantics (or a Core-owned equivalent verifier), prove C contains exactly those authoritative memory/relationship/lifecycle changes, and then also require hard validation, strict Index v2 freshness, exact commit/tree/parent/binding/scope, and no unauthorized unrelated/control-plane changes; finalizer-provided expected diff/manifests are not conformance authority;
 - auditor scratch writes used for Core-owned conformance replay are disposable/local only; the auditor never repairs C, replaces candidate evidence, or obtains publication authority;
-- immutable generation-bound audit receipt binds exact request digest/fingerprint, H0, C/tree, independently derived conformance result, and pinned runtime/delivery/contract identities, with deterministic audit failure durably suspending/reconciling lane before release;
+- immutable generation-bound candidate audit receipt binds exact request digest/fingerprint, H0, C/tree, independently derived conformance result, and pinned runtime/delivery/contract identities, with deterministic audit failure durably suspending/reconciling lane before release;
 - DO-only `AUDITED -> PUBLISHING` authorization after current generation, cancellation, lane, evidence, App/repo/canonical-ref auth, directly observed private visibility, direct bound-ref==H0, and barrier checks;
 - cancellation-vs-publication linearized by local atomic state transition, with rollback-independent cancellation evidence required before a cancellation is durably released;
 - before **any** externally effective publication/token/executor/API I/O, durably create an immutable rollback-independent publication-intent record bound to repository/ref/H0/C/operation/generation/evidence/protocol/publication attempt and a conservative fencing horizon; a later restored DO treats that exact C as possibly published until definitive evidence proves otherwise;
@@ -262,17 +268,17 @@ Primary work:
 - ordinary out-of-band adoption runs only when no ADR-018 protected publication anchor blocks it, requires the last accepted canonical revision to remain an ancestor of the proposed new accepted revision, and requires exact trust/repository/index/mutation-idempotency-history checks; backward/sideways non-descendant rewrites and sibling descendants excluding a proven/possible C remain reconciliation-required until ancestry-preserving recovery because Core committed-idempotency evidence is reachable Git history;
 - observed non-private visibility suspends/fails closed for normal hosted writes and requires explicit revalidation before later resume; threat-model documentation states that an authorized GitHub owner/admin can change visibility outside the Git-ref CAS and Runethread does not claim atomic visibility+ref locking without Administration authority;
 - one hosted implementation for Free/paid private GitHub, with paid branch/ruleset protection optional defense-in-depth;
-- explicit release/protocol versioning and non-atomic Worker/DO/finalizer/auditor/evidence/publication/reconciliation/privacy/managed-bootstrap/canonical-ref/safety-journal/recovery/audit-conformance deployment handling using maintenance/drain or versioned blue/green;
-- operation outcomes `NO_OP`, `ALREADY_COMMITTED`, `NEEDS_REPREPARE`, finalization/audit/cancel/reconciliation plus lane OPEN/SUSPENDED/MAINTENANCE;
-- control-plane barriers for contract/schema/trust/repository-format/bootstrap/delivery/migration/evidence/publication/reconciliation/privacy/canonical-ref binding/recovery/audit-conformance changes;
+- explicit release/protocol versioning and non-atomic Worker/DO/finalizer/auditor-verifier/evidence/publication/reconciliation/privacy/managed-bootstrap/canonical-ref/safety-journal/recovery/audit-conformance/terminal-success-verification deployment handling using maintenance/drain or versioned blue/green;
+- operation outcomes `NO_OP`, `ALREADY_COMMITTED`, `NEEDS_REPREPARE`, finalization/audit/cancel/reconciliation plus lane OPEN/SUSPENDED/MAINTENANCE, with `NO_OP`/`ALREADY_COMMITTED` not authoritative until ADR-021 verification succeeds;
+- control-plane barriers for contract/schema/trust/repository-format/bootstrap/delivery/migration/evidence/publication/reconciliation/privacy/canonical-ref binding/recovery/audit-conformance/terminal-success-verification changes;
 - request/rate/repository/artifact/Container/retry/operation-history/log/private-data retention limits and threat model, distinguishing short-lived private content from minimized recovery metadata;
 - project current-state/overview prose treated as materialized orientation views only after the ADR-015 contract migration, not as an implicit contract-v8 relaxation;
 - remove push-on-every-normal-memory full Actions validation only through the released starter/upgrader/template/private-repository migration; every retained external Action is pinned to a full immutable commit SHA and customized workflow/README content is not silently overwritten;
-- measure cold/warm source, bytes, idempotency/stale preflight, finalization, package, request-conformance audit, publication, publisher/API-path startup/fencing, journal recovery, alarm/retry/interleaving, provider startup, total latency/cost.
+- measure cold/warm source, bytes, idempotency/stale preflight, finalization, package, request-conformance audit, terminal-success verification, publication, publisher/API-path startup/fencing, journal recovery, alarm/retry/interleaving, provider startup, total latency/cost.
 
 ### Pre-implementation architecture-freeze gate
 
-Before implementation begins, exact current ADR/planning state must complete a fresh adversarial review covering correctness, contract compatibility, state ownership/component necessity, async interleaving, concurrency, crash/retry/ambiguous response, destructive Durable Object rollback/recreation, privilege/evidence-authority boundaries, evidence/safety-journal liveness and retention, independent request-to-candidate conformance, publisher/publication-capability lifetime, exact publication, proven/possible publication-history preservation, accepted-history reconciliation, repository visibility/privacy, canonical-ref lifecycle, managed-bootstrap/support rollout, workflow supply-chain immutability, deployment/version skew, resource limits, and avoidable duplication/latency.
+Before implementation begins, exact current ADR/planning state must complete a fresh adversarial review covering correctness, contract compatibility, state ownership/component necessity, async interleaving, concurrency, crash/retry/ambiguous response, destructive Durable Object rollback/recreation, privilege/evidence-authority boundaries, evidence/safety-journal liveness and retention, independent request-to-candidate conformance, independent terminal-success verification, publisher/publication-capability lifetime, exact publication, proven/possible publication-history preservation, accepted-history reconciliation, repository visibility/privacy, canonical-ref lifecycle, managed-bootstrap/support rollout, workflow supply-chain immutability, deployment/version skew, resource limits, and avoidable duplication/latency.
 
 The review passes only with **zero required architecture/planning edits**. Any material correction/simplification/missing invariant/changed boundary is recorded first and resets the gate; full review repeats against the new exact head. Prototype questions may remain only with accepted safe invariant-preserving fallback.
 
@@ -284,7 +290,9 @@ The following full attack review, explicitly started against synchronized head `
 
 The next full attack review, explicitly started against synchronized head `0f7f95c8220d16121144de5d1c1a4f42978550bd`, found material destructive-control-plane-recovery and managed-support/security corrections and produced ADR-019 plus synchronized planning edits. It also failed the zero-edit freeze gate.
 
-The current full attack review, explicitly started against synchronized head `4dbdef5c08142856ba1795544795cea254193398`, found that the fresh audit could validate candidate C and its request metadata/scope without independently proving that C's in-scope semantic bytes are the exact Core-derived result of the immutable sealed request. ADR-020 adds that request-to-candidate conformance gate. **This review therefore also fails the zero-edit freeze gate.** No further review run is started in the same prompt after these edits; implementation remains blocked until a later explicitly requested full review of the new exact synchronized head passes with zero edits.
+The following full attack review, explicitly started against synchronized head `4dbdef5c08142856ba1795544795cea254193398`, found that the fresh audit could validate candidate C and its request metadata/scope without independently proving that C's in-scope semantic bytes are the exact Core-derived result of the immutable sealed request. ADR-020 added that request-to-candidate conformance gate. It also failed the zero-edit freeze gate.
+
+The current full attack review, explicitly started against synchronized head `34421411f4501f762c9c104e45d2cc92a9c3c5cb`, confirmed ADR-020 closes the candidate-content hole but found successful terminal `NO_OP`/`ALREADY_COMMITTED` claims still bypassed fresh independent verification. ADR-021 requires those no-candidate success claims to be independently proven before durable client-visible success/lane release. **This review therefore also fails the zero-edit freeze gate.** No further review run is started in the same prompt after these edits; implementation remains blocked until a later explicitly requested full review of the new exact synchronized head passes with zero edits.
 
 The currently documented GraphQL expected-old ref path is a non-gating implementation prototype under the escape hatch already accepted by ADR-016: exact Git-protocol publication remains the safe fallback until exact candidate-object identity and GitHub App permission behavior are proven end-to-end.
 
@@ -303,21 +311,25 @@ Exit criteria are tracked in issue #20. At minimum:
 - one repository DO is sole live lane/state/publication-authorization authority, no second Workflow state machine;
 - rollback-independent safety journal exists only as recovery evidence and cannot authorize ordinary transitions;
 - DO state + alarms recover accepted work without client traffic in ordinary execution;
-- explicit PITR/recreation recovery reconstructs client-visible accepted operations, cancellation wins, accepted canonical anchors, and possible/proven publication history before normal writes resume;
+- explicit PITR/recreation recovery reconstructs client-visible accepted operations, cancellation wins, accepted canonical anchors, independently verified terminal-success outcomes, and possible/proven publication history before normal writes resume;
 - rollback to before a successful cancellation cannot resurrect cancelled work;
 - rollback to before publication cannot forget a journaled possible/proven `C` or start a new semantic candidate as if publication never happened;
+- rollback to before a returned verified `NO_OP`/`ALREADY_COMMITTED` reconstructs or safely re-verifies that exact terminal-success fact rather than silently executing a new semantic mutation;
 - missing/corrupt/forked required recovery journal fails closed;
 - alarm/request/cancel/webhook interleaving is safe through atomic phase/generation claims and stale result rejection;
 - accepted response cannot strand work without durable alarm/recovery schedule and rollback-independent acceptance evidence;
 - committed idempotency resolved before stale classification;
 - cold finalizer preserves historical idempotency, fresh retry never treats unpromoted local C as committed;
 - finalization evidence+receipt ordering is deterministic/no-overwrite;
-- wrong-role/wrong-generation evidence cannot advance operation state and finalizer cannot create authoritative audit receipt;
+- wrong-role/wrong-generation evidence cannot advance operation state and finalizer cannot create authoritative candidate-audit or terminal-success-verification receipts;
 - live referenced evidence survives nominal retention boundaries, including protected proven/possible publication candidates, while private content and minimized safety metadata follow their distinct explicit retention/deletion policies;
 - MemoryService builds exact C, writes Index once, hard-validates, leaves remote canonical ref H0 before audit;
-- private request/candidate/audit data does not leak in ordinary metadata/log/status/safety journal;
+- private request/candidate/audit/terminal-verification data does not leak in ordinary metadata/log/status/safety journal;
 - fresh auditor independently proves C's authoritative semantic bytes are the Core-derived result of exact sealed request + exact H0, binds that conformance to the audit receipt, and separately verifies exact C/strict index/commit/tree/parent/scope without repair/publication authority;
 - a valid/index-fresh/in-scope candidate with copied legitimate request fingerprint but altered requested Markdown/JSON/relationship semantics fails audit;
+- a candidate-producing request falsely reported by finalizer as `NO_OP` cannot become terminal success; fresh exact request+H0 Core verification must independently return no-op;
+- a false `ALREADY_COMMITTED` claim cannot become terminal success; fresh accepted-canonical Core/repository lookup must independently prove exact idempotency key/request fingerprint/mutation metadata before stale classification;
+- terminal-success verification evidence is immutable/role-separated and rollback-recoverable before the result releases the lane;
 - only repository DO can authorize publication after exact evidence/cancel/lane/auth/ref/private-visibility checks;
 - rollback-independent publication intent is established before any externally effective publication/token/executor/API I/O;
 - default/canonical-branch rename/change/deletion/transfer fails closed rather than silently redirects;
@@ -330,7 +342,7 @@ Exit criteria are tracked in issue #20. At minimum:
 - previously proven committed Runethread operation metadata remains reachable in canonical history before the normal hosted lane reopens;
 - forward/sideways/backward/deleted/recreated ref races cannot be overwritten as if H0 still held;
 - ambiguous publication and webhook/order failures reconcile deterministically after capability fencing;
-- deployment/version barriers prevent mixed incompatible finalizer/auditor/evidence/publication/reconciliation/privacy/managed-bootstrap/safety-journal/recovery/audit-conformance semantics;
+- deployment/version barriers prevent mixed incompatible finalizer/auditor-verifier/evidence/publication/reconciliation/privacy/managed-bootstrap/safety-journal/recovery/audit-conformance/terminal-success-verification semantics;
 - resource/provider/privacy failures leave canonical Git unchanged;
 - local/offline MemoryService remains Cloudflare-independent;
 - push-on-every-memory Actions validation removed from normal hosted data plane through the released managed migration;
@@ -512,6 +524,6 @@ Possible future work:
 
 The immediate milestone is **Phase 2.6 — Memory Write Delivery Pipeline**.
 
-> Finish the pre-implementation architecture freeze, then implement the ADR-015 contract + managed-support migration followed by the Cloudflare-hosted, audited, per-repository mutation-delivery path defined by ADR-012 through ADR-020. Normal hosted writes begin only on an explicitly compatible migrated private repository. Reconciliation preserves accepted Git/idempotency history and every proven/possibly published candidate. A minimized append-only safety journal prevents destructive Durable Object rollback/recreation from forgetting accepted promises, cancellations, accepted anchors, or publication intents without becoming a second live state machine. Independent audit uses role-separated immutable evidence and now also proves, through Core-owned semantics, that exact candidate C is the result of exact sealed request + H0 rather than merely a valid in-scope tree carrying the right fingerprint. Canonical publication uses exact audited candidate objects plus a true expected-old Git update with publication-capability fencing; the current GraphQL expected-old path remains an implementation prototype, with the minimal Git publisher retained as safe fallback until exact-object identity is proven. The review against `4dbdef5c…` found the ADR-020 request-conformance gap, so implementation remains blocked until a later zero-edit full review of the new exact planning head passes.
+> Finish the pre-implementation architecture freeze, then implement the ADR-015 contract + managed-support migration followed by the Cloudflare-hosted, audited, per-repository mutation-delivery path defined by ADR-012 through ADR-021. Normal hosted writes begin only on an explicitly compatible migrated private repository. Reconciliation preserves accepted Git/idempotency history and every proven/possibly published candidate. A minimized append-only safety journal prevents destructive Durable Object rollback/recreation from forgetting accepted promises, cancellations, accepted anchors, publication intents, or independently verified terminal-success outcomes without becoming a second live state machine. Candidate success crosses ADR-020's Core-owned exact request+H0 -> C conformance audit; successful no-candidate `NO_OP`/`ALREADY_COMMITTED` claims cross ADR-021's fresh Core/repository verification so the finalizer cannot bypass the independent boundary by falsely declaring success. Canonical publication uses exact audited candidate objects plus a true expected-old Git update with publication-capability fencing; the current GraphQL expected-old path remains an implementation prototype, with the minimal Git publisher retained as safe fallback until exact-object identity is proven. The review against `34421411…` found the ADR-021 terminal-success bypass, so implementation remains blocked until a later zero-edit full review of the new exact planning head passes.
 
 Only after Phase 2.6 exits green should Phase 3 MCP implementation begin.
