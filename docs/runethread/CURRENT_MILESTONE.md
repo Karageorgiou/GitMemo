@@ -50,6 +50,14 @@ Phase 2.6 implementation priorities are:
 18. remove push-on-every-normal-memory full GitHub Actions validation from the hosted data-plane path through the proper managed workflow/control-plane rollout, while retaining Actions where health/recovery/migration/control-plane checks prove a distinct invariant;
 19. roll the finished mechanism through the required release/downstream gates and a real private memory repository, then measure cold/warm source acquisition, bytes transferred, finalization, packaging, audit, publication, and end-to-end latency/cost separately.
 
+### Pre-implementation architecture-freeze gate
+
+Phase 2.6 implementation code MUST NOT begin merely because ADR-014 has been drafted or CI is green. Before the first implementation branch/repository work begins, the exact current ADR/planning state must complete a fresh adversarial architecture review covering correctness, state ownership, concurrency, crash/retry behavior, privilege boundaries, deployment/version skew, privacy/resource limits, and avoidable latency/duplication.
+
+The review is considered a pass only when it produces **zero required architecture or planning edits**. If the review identifies a material correction, simplification, missing invariant, or changed implementation boundary, record that change first and repeat the full review against the new exact head. A previous review does not count after the architecture/planning head changes.
+
+Only a zero-edit adversarial review of the exact architecture/planning head unlocks Phase 2.6 implementation. Prototype questions already explicitly delegated to implementation by the accepted ADRs may remain open when they have a safe invariant-preserving fallback and do not require choosing architecture by guesswork.
+
 Phase 2.6 v1 deliberately uses singleton operations. The following remain deferred:
 
 - semantic memory/read dependency quantification;
