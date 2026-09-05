@@ -137,7 +137,15 @@ Governing decisions:
 
 - ADR-012 — audited candidate promotion for external memory delivery;
 - ADR-013 — per-repository serialized mutation-delivery queue;
-- ADR-014 — Cloud-hosted Phase 2.6 memory-delivery control plane.
+- ADR-014 — Cloud-hosted Phase 2.6 memory-delivery control plane;
+- ADR-015 — project current-state documents become asynchronous orientation projections only in the next operational contract;
+- ADR-016 — hosted contract eligibility, evidence capability/retention, and exact-publication hardening.
+
+### Contract prerequisite
+
+Contract v8 remains immutable and requires relevant project current-state synchronization as part of memory-write completion. Current `MemoryService.ApplyMutation` does not implement that project-view semantic write. Therefore, after the architecture-freeze gate passes, the first implementation slice is the ADR-015 contract transition (target contract v9), exact v8 fixture/migration/release verification, template migration, and private-repository migration.
+
+Normal hosted Phase 2.6 mutation is admitted only after the repository is explicitly migrated to the projection-capable contract implementing ADR-015, or a later contract explicitly supported by the hosted release. Contract-v8 repositories may be read, verified, reconciled, and upgraded, but the normal hosted mutation path does not silently bypass the v8 synchronization rule.
 
 Target topology:
 
@@ -149,12 +157,13 @@ runethread/hosted
   public API + webhook edge
   per-repository runtime Durable Objects + SQLite + alarms
   attached finalizer Containers
+  private role-scoped evidence boundary/storage
   fresh auditor Container/DO contexts
-  private GitHub gateway/publisher
-  private request/candidate/audit evidence storage
+  private GitHub App gateway
+  minimal exact-Git publisher executor
 ```
 
-`runethread/hosted` is the target provider-specific component unless implementation preflight finds a concrete topology/naming conflict. Hosted provider churn must not become a dependency of Core. Hosted releases pin immutable verified Core/runtime/container identities rather than floating public `main`.
+`runethread/hosted` is the target provider-specific component unless implementation preflight finds a concrete topology/naming conflict. Hosted provider churn must not become a dependency of Core. Hosted releases pin immutable verified Core/runtime/container/protocol identities rather than floating public `main`.
 
 Architecture:
 
@@ -170,33 +179,39 @@ repository-runtime Durable Object
       |
 attached finalizer Container
       |
-private immutable candidate/finalization evidence
+role-scoped immutable candidate/finalization evidence
       |
 fresh reduced-privilege auditor
       |
-private immutable audit evidence
+role-scoped immutable audit evidence
       |
 repository DO authorizes PUBLISHING
       |
-private GitHub gateway/publisher
+private GitHub App gateway
       |
-exact CAS on authorized canonical branch ref
+short-lived one-repo Contents-write token
       |
-user-owned GitHub repository
+minimal Git publisher executor
+      |
+exact expected-old H0 -> exact audited C
+      |
+user-owned GitHub canonical branch ref
 ```
 
 Primary work:
 
 - authenticated request/status/cancel API plus explicit caller-to-App-installation repository authorization;
 - explicit repository binding to immutable repository identity + App installation + canonical branch ref + last accepted revision, normally discovering the ref from default branch at adoption but never silently following later ref/default changes;
-- private sealed request bodies stored as short-retention content-addressed/no-overwrite objects, with only opaque references/digests in DO state/logs/status;
+- private sealed request bodies stored as content-addressed/no-overwrite objects, with only opaque references/digests in DO state/logs/status;
+- role-scoped evidence creation so admission/finalizer/auditor can create only their exact artifact class/key for the current repository/attempt/phase/generation under digest/size/create-if-absent constraints; finalizer cannot manufacture authoritative audit evidence and auditor cannot replace finalization evidence;
+- referenced evidence remains live for queued/active/retrying/audited/publishing/reconciling operations; ordinary provider TTL/GC applies only after the operation no longer depends on it and the bounded recovery/incident window permits deletion;
 - separate hosted attempt identity from Core idempotency identity; hosted identity binds repo/canonical-ref/request digest while Core owns semantic committed retry/conflict;
-- one repository DO as sole hosted lane/operation-state authority, with transactional SQLite for bounded queue, one active op, exact phase/execution generation, retry/backoff/deadline state, evidence refs, canonical-ref binding, suspension/maintenance/reconciliation;
+- one repository DO as sole hosted lane/operation-state/publication-authorization authority, with transactional SQLite for bounded queue, one active op, exact phase/execution generation, retry/backoff/deadline state, evidence refs, canonical-ref binding, suspension/maintenance/reconciliation;
 - no Cloudflare Workflow in v1; one DO alarm is the at-least-once scheduler/recovery wakeup and the state driver explicitly persists/reschedules prolonged retryable failure;
-- explicit async-interleaving protocol: local atomic phase+generation claim before every Container/R2/GitHub external action, external I/O outside `blockConcurrencyWhile()`, and compare operation/phase/generation before accepting result; stale-generation output cannot advance state;
+- explicit async-interleaving protocol: local atomic phase+generation claim before every Container/object-store/GitHub external action, external I/O outside `blockConcurrencyWhile()`, and compare operation/phase/generation before accepting result; stale-generation output cannot advance state;
 - durable acceptance handoff: return `ACCEPTED` only after request/operation metadata and a recoverable alarm are established; exact resubmission/status/recovery repairs missing alarms;
 - Container/DO relationship used so repository runtime manages attached finalizer lifecycle rather than another coordinator;
-- private internal GitHub gateway with long-lived App key; public API has no publication capability and ordinary runtime App baseline is Contents/Metadata without Administration/Workflows;
+- private internal GitHub gateway retains the long-lived App private key; public API, finalizer, auditor, evidence storage, and publisher executor never receive that key; ordinary runtime App baseline is Contents/Metadata without Administration/Workflows;
 - full hosted operation serialized per repo while preserving ADR-003 committed-idempotency-before-stale ordering; stale work may require cold source preflight but stops before candidate/Index/package/audit once proven uncommitted;
 - finalizer runs exact pinned Runethread Go/Core + Git; cold source target at most one clone/fetch with historical idempotency reachable, optional warm cache only after direct canonical-ref reset;
 - hardened Git policy disabling/refusing hooks, recursive submodules, filters, unsafe config/includes, credential helpers, and similar repository-controlled execution;
@@ -211,56 +226,63 @@ Primary work:
 - immutable generation-bound audit receipt, with deterministic audit failure durably suspending/reconciling lane before release;
 - DO-only `AUDITED -> PUBLISHING` authorization after current generation, cancellation, lane, evidence, App/repo/canonical-ref auth, direct bound-ref==H0, and barrier checks;
 - cancellation-vs-publication linearized by local atomic state transition; once PUBLISHING wins, cancellation is too late and exact Git outcome decides;
-- atomic expected-old-SHA non-force publication to exact audited C on bound canonical ref;
-- clone-free Git-object publication only if exact object identity is proven; exact candidate push fallback otherwise;
+- only after durable `PUBLISHING`, private App gateway mints a short-lived one-repository minimum Contents-write installation token to a minimal trusted publisher executor;
+- publisher executor receives only exact audited Git objects + H0 + C + bound ref + narrow token, performs no source clone/semantic mutation/repair/audit, never constructs C2, and attempts only an expected-old Git-protocol update from exact H0 to exact C;
+- the currently documented GitHub REST reference update with `force=false` is not accepted as proof of exact expected-old CAS; clone-free/API publication may replace the publisher executor only after authoritative documentation and integration tests prove exact C identity and atomic old-ref==H0 semantics;
 - ambiguous publication response resolved by bound-ref state: C = committed, H0 = retry same exact authorized publication, anything else = reconciliation;
 - cheap post-CAS bound-ref==C confirmation, no redundant full validation;
 - signed push webhooks only as hints; always reread bound canonical ref and never mutate accepted state from payload alone;
 - proven uncommitted stale work -> `NEEDS_REPREPARE`; unexpected active-operation ref movement -> reconciliation;
 - one hosted implementation for Free/paid private GitHub, with paid branch/ruleset protection optional defense-in-depth;
-- explicit release/protocol versioning and non-atomic Worker/Container/control/canonical-ref deployment handling using maintenance/drain or versioned blue/green;
+- explicit release/protocol versioning and non-atomic Worker/DO/finalizer/auditor/evidence/publisher/canonical-ref deployment handling using maintenance/drain or versioned blue/green;
 - operation outcomes `NO_OP`, `ALREADY_COMMITTED`, `NEEDS_REPREPARE`, finalization/audit/cancel/reconciliation plus lane OPEN/SUSPENDED/MAINTENANCE;
-- control-plane barriers for contract/schema/trust/repository-format/bootstrap/delivery/migration/canonical-ref binding changes;
+- control-plane barriers for contract/schema/trust/repository-format/bootstrap/delivery/migration/evidence/publication/canonical-ref binding changes;
 - request/rate/repository/artifact/Container/retry/operation-history/log/private-data retention limits and threat model;
-- project current-state/overview prose treated as materialized orientation views, not atomic dual-write;
+- project current-state/overview prose treated as materialized orientation views only after the ADR-015 contract migration, not as an implicit contract-v8 relaxation;
 - remove push-on-every-normal-memory full Actions validation through managed rollout, retaining only distinct health/recovery/migration/PR/control-plane checks;
-- measure cold/warm source, bytes, idempotency/stale preflight, finalization, package, audit, publication, alarm/retry/interleaving, provider startup, total latency/cost.
+- measure cold/warm source, bytes, idempotency/stale preflight, finalization, package, audit, publication, publisher-executor startup, alarm/retry/interleaving, provider startup, total latency/cost.
 
 ### Pre-implementation architecture-freeze gate
 
-Before implementation begins, exact current ADR/planning state must complete a fresh adversarial review covering correctness, state ownership/component necessity, async interleaving, concurrency, crash/retry/ambiguous response, privilege boundaries, canonical-ref lifecycle, deployment/version skew, privacy/resource limits, and avoidable duplication/latency.
+Before implementation begins, exact current ADR/planning state must complete a fresh adversarial review covering correctness, contract compatibility, state ownership/component necessity, async interleaving, concurrency, crash/retry/ambiguous response, privilege/evidence-authority boundaries, evidence liveness/retention, exact publication, canonical-ref lifecycle, deployment/version skew, privacy/resource limits, and avoidable duplication/latency.
 
 The review passes only with **zero required architecture/planning edits**. Any material correction/simplification/missing invariant/changed boundary is recorded first and resets the gate; full review repeats against the new exact head. Prototype questions may remain only with accepted safe invariant-preserving fallback.
 
-Phase 2.6 v1 deliberately uses singleton operations. Deferred: semantic dependency quantification, batching/coalescing, automatic semantic re-preparation, general AI task orchestration, project-orientation refresh beyond correctness needs.
+The attack review completed on 2026-09-05 against pre-amendment head `68549677e0fbb76b0018ce3aaa574c1d1ba4e1bb` found material changes and produced ADR-016 plus synchronized planning edits. It therefore **failed** the zero-edit freeze gate. Per the explicit instruction for that cycle, no fresh attack run starts automatically after the edits; implementation remains blocked until a later explicitly requested full review of the new exact head passes with zero edits.
+
+Phase 2.6 v1 deliberately uses singleton operations. Deferred: semantic dependency quantification, batching/coalescing, automatic semantic re-preparation, general AI task orchestration, and project-orientation refresh machinery beyond the ADR-015 correctness semantics.
 
 Exit criteria are tracked in issue #20. At minimum:
 
+- zero-edit architecture-freeze review recorded on the exact final planning head before implementation;
+- contract-v8 repository is not admitted for normal hosted mutation and supported migration to the ADR-015 contract is verified first;
 - remote authenticated caller submits sealed mutation without canonical file editing/GitHub write credential;
 - repository/App/canonical-ref auth cannot be gained by guessed identifiers;
 - Free/protected paid private repos use same hosted mutation path;
-- hosted provider code outside Core, exact pinned runtime/container;
-- one repository DO is sole lane/state/publication authority, no second Workflow state machine;
+- hosted provider code outside Core, exact pinned runtime/container/protocol identities;
+- one repository DO is sole lane/state/publication-authorization authority, no second Workflow state machine;
 - DO state + alarms recover accepted work without client traffic;
 - alarm/request/cancel/webhook interleaving is safe through atomic phase/generation claims and stale result rejection;
 - accepted response cannot strand work without durable alarm/recovery schedule;
 - committed idempotency resolved before stale classification;
 - cold finalizer preserves historical idempotency, fresh retry never treats unpromoted local C as committed;
 - finalization evidence+receipt ordering is deterministic/no-overwrite;
+- wrong-role/wrong-generation evidence cannot advance operation state and finalizer cannot create authoritative audit receipt;
+- live referenced evidence survives nominal retention boundaries, while orphan/safely-terminal evidence is deleted under explicit policy;
 - MemoryService builds exact C, writes Index once, hard-validates, leaves remote canonical ref H0 before audit;
-- private request/candidate/audit data obeys tested short retention and does not leak in ordinary metadata/log/status;
+- private request/candidate/audit data does not leak in ordinary metadata/log/status;
 - fresh auditor verifies exact C/strict index/scope without repair/publication authority;
 - only repository DO can authorize publication after exact evidence/cancel/lane/auth/ref checks;
 - default/canonical-branch rename/change/deletion/transfer fails closed rather than silently redirects;
-- publisher CAS changes only bound canonical ref H0->exact C;
+- long-lived App key remains gateway-only and publisher receives only a short-lived one-repo minimum write token after PUBLISHING;
+- publisher executor performs no second source clone and changes only exact bound ref H0->exact audited C through a true expected-old Git update;
+- forward/sideways/backward/deleted/recreated ref races cannot be overwritten as if H0 still held;
 - ambiguous publication and webhook/order failures reconcile deterministically;
-- App private key isolated, ordinary permissions exclude Administration/Workflows;
-- deployment/version barriers prevent mixed incompatible semantics;
+- deployment/version barriers prevent mixed incompatible finalizer/auditor/evidence/publisher semantics;
 - resource/provider/privacy failures leave canonical Git unchanged;
 - local/offline MemoryService remains Cloudflare-independent;
 - push-on-every-memory Actions validation removed from normal hosted data plane through managed rollout;
-- real private-repo rollout and measured latency/cost prove redundant work removed without deleting distinct trust boundaries;
-- zero-edit architecture-freeze review recorded on exact planning head before implementation.
+- real private-repo rollout and measured latency/cost prove redundant work removed without deleting distinct trust boundaries.
 
 Hosted Runethread infrastructure account requires Workers Paid because Containers are needed; this is not an end-user Cloudflare-plan requirement.
 
@@ -438,6 +460,6 @@ Possible future work:
 
 The immediate milestone is **Phase 2.6 — Memory Write Delivery Pipeline**.
 
-> Build and verify the Cloudflare-hosted, audited, per-repository mutation-delivery path defined by ADR-012, ADR-013, and ADR-014 so a remote caller can submit a sealed MemoryService mutation, receive durable asynchronous state, and make only an independently audited exact candidate canonical through race-safe publication with no redundant clone/validation/orchestration ceremony.
+> Finish the pre-implementation architecture freeze, then implement the ADR-015 contract migration followed by the Cloudflare-hosted, audited, per-repository mutation-delivery path defined by ADR-012 through ADR-016. Normal hosted writes begin only on an explicitly compatible migrated contract, independent audit uses role-separated immutable evidence, and canonical publication uses exact audited candidate objects plus a true expected-old Git update. This attack cycle found material edits, so implementation remains blocked until a later zero-edit full review of the new exact planning head passes.
 
 Only after Phase 2.6 exits green should Phase 3 MCP implementation begin.
