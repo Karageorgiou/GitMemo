@@ -438,27 +438,37 @@ A deliberate stop is a successful safety outcome, not a failure of progress.
 
 ## 20. Current Phase 2.6 application
 
-Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, runtime-release / contract-release separation is part of the compatibility model, and ADR-012/ADR-013 are accepted.
+Phase 2.5 compatibility hardening is complete: contract v8 / Runethread v0.8.0 is released, the public template and known private memory repository are migrated, runtime-release / contract-release separation is part of the compatibility model, and ADR-012/ADR-013/ADR-014 are accepted.
 
 Phase 2.6 Memory Write Delivery Pipeline is the current milestone. Phase 3 MCP implementation is blocked until Phase 2.6 satisfies the exit criteria tracked in issue #20.
 
 For Phase 2.6 work:
 
-- start from a freshly verified current `main` and the accepted ADR-012/ADR-013 boundaries;
+- start from a freshly verified current `main` and the accepted ADR-012/ADR-013 invariants as amended by ADR-014;
 - keep the existing Core development pipeline intact; do not create a reduced-safety "fast mode" for Core engineering changes;
-- treat GitHub Actions as the first replaceable execution adapter, not the architectural queue authority or a new canonical database;
-- accept one sealed MemoryService-compatible mutation request at the GitHub adapter boundary rather than watching a caller assemble multi-commit request files;
-- invoke the existing deterministic MemoryService/Core implementation for finalization rather than reimplementing canonical pathing, lifecycle, provenance, trust, indexing, idempotency, concurrency, or Git transaction semantics in workflow code;
-- construct the candidate from the exact expected Git revision and keep it noncanonical until independent audit passes;
-- require Index v2 regeneration, hard validation, strict freshness, and a fresh read-only audit of the exact candidate before publication;
-- use the canonical Git commit SHA as the concurrency/version token and re-read canonical state immediately before publication;
-- publish only through a non-force fast-forward compare-and-swap to the exact audited candidate; stale canonical movement results in `NEEDS_REPREPARE`, not silent semantic rebasing;
-- use a dedicated least-privilege Runethread GitHub App and managed memory-repository policy for canonical publication in the GitHub-backed profile;
-- park stale operations outside the runnable lane without automatically reinterpreting user intent;
-- preserve idempotent crash/lost-response retry, cancellation-before-publication semantics, audit-failure write suspension, and exclusive control-plane barriers;
+- treat Cloudflare as the primary hosted execution/control-plane provider for Phase 2.6 while keeping Core itself free of Cloudflare/GitHub hosted dependencies and preserving local/offline MemoryService operation;
+- use one Durable Object per immutable GitHub repository identity for hosted lane admission/serialization, suspension/maintenance/reconciliation, operation status, and last accepted canonical revision;
+- use a Cloudflare Workflow for one admitted operation's durable idempotent execution checkpoints/retries, without duplicating the Durable Object's lane authority or treating Workflow state as canonical memory;
+- run the real Runethread Go/Core + Git finalizer in a Container and invoke the existing MemoryService mutation implementation rather than reproducing canonical pathing, lifecycle, provenance, indexing, idempotency, concurrency, or Git transaction semantics in provider code;
+- resolve exact committed retries, no-ops, and stale expected revisions before expensive candidate/audit work;
+- target at most one GitHub clone in a cold normal finalization path; preserve reachable commit history required for idempotency and treat any warm clone only as a disposable cache after exact clean refresh;
+- let `ApplyMutation` perform its existing Index v2 write and hard validation once; do not add a redundant equivalent generation/repair pass after it succeeds;
+- keep remote GitHub `main` noncanonical at expected `H0` while the finalizer creates local exact candidate `C`;
+- export `C` as a private immutable/content-addressed candidate package bound to operation/idempotency identity, `H0`, candidate commit/tree, request fingerprint, exact runtime/build identity, and pinned contract identity;
+- prove the package is self-contained even when partial-clone mechanics are used, then audit it in a fresh reduced-privilege container without another GitHub clone, repair step, or publisher credential;
+- use a least-privilege Runethread GitHub App whose long-lived private-key material remains only in the hosted secret boundary and whose per-operation credential is repository/permission-scoped and short-lived;
+- publish only exact audited `C` through an atomic expected-old-revision non-force compare-and-swap; use clone-free Git-object publication only after integration evidence proves exact candidate identity, otherwise use an exact-artifact push fallback;
+- after exact publication, synchronously confirm only `main == C`; do not add another full clone/validation cycle merely to re-prove the same immutable candidate;
+- use one normal hosted architecture for GitHub Free and paid private repositories, treating paid branch/ruleset protection as optional defense-in-depth rather than a correctness prerequisite;
+- fail closed into reconciliation after unexpected/out-of-band canonical movement;
+- preserve `NEEDS_REPREPARE`, stable idempotent crash/lost-response recovery, cancellation-before-publication, audit-failure suspension, and exclusive control-plane barriers;
 - keep Phase 2.6 v1 singleton-only; semantic dependency quantification, neighboring-operation batching/coalescing, and automatic semantic re-preparation require later accepted design work;
-- roll the finished mechanism through the public template and then a real private memory repository under the normal downstream gates, and measure end-to-end latency against the prior duplicated synchronous workflow.
+- do not turn project orientation/current-state prose into a required atomic-memory dual write; treat future refresh of those views as a separate projection/materialized-view concern;
+- keep GitHub Actions off the normal interactive mutation critical path and use it only where independent repository-health, migration, recovery, or control-plane validation proves a distinct invariant;
+- measure cold/warm clone, finalization, candidate packaging, audit, publication, and total latency/cost separately so later optimization is evidence-driven.
 
-For the later Phase 3 MCP work, retain the existing rule that MCP is a thin transport adapter over MemoryService and the accepted delivery lifecycle. Re-check current authoritative MCP SDK/protocol and Go/toolchain requirements only when Phase 3 actually becomes current; do not add MCP dependencies during Phase 2.6 merely because they are planned next.
+Installing or materially changing the hosted Phase 2.6 mechanism is itself a control-plane barrier. Roll it out through the full Core/release/downstream process rather than using the new data-plane write path to install itself.
 
-Any new evidence that changes repository semantics must still pass the normal contract and migration gates above rather than being smuggled into Phase 2.6 as a delivery-adapter detail.
+For the later Phase 3 MCP work, retain the existing rule that MCP is transport over MemoryService and the established delivery lifecycle. Phase 3 may expose both local/offline MemoryService and remote hosted memory delivery; re-check current authoritative MCP SDK/protocol/authentication requirements only when Phase 3 becomes current, and do not add MCP dependencies during Phase 2.6 merely because they are planned next.
+
+Any new evidence that changes repository semantics must still pass the normal contract and migration gates above rather than being smuggled into Phase 2.6 as a hosted-adapter detail.
