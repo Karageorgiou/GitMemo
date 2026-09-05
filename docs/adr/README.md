@@ -34,6 +34,7 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-017](ADR-017-reconciliation-privacy-and-publication-fencing.md) | Phase 2.6 reconciliation, repository privacy, and publication fencing | Accepted |
 | [ADR-018](ADR-018-indeterminate-publication-history-preservation.md) | Indeterminate publication preserves possible committed history | Accepted |
 | [ADR-019](ADR-019-control-plane-rollback-and-managed-support-hardening.md) | Control-plane rollback recovery and managed-support hardening | Accepted |
+| [ADR-020](ADR-020-independent-candidate-request-conformance.md) | Independent candidate-to-request conformance audit | Accepted |
 
 ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
 
@@ -46,6 +47,8 @@ ADR-017 further hardens the same hosted profile. Ordinary out-of-band adoption m
 ADR-018 closes the remaining indeterminate-publication/history gap. A candidate that is proven or possibly published remains a protected history anchor until publication and ancestry are resolved; a later current-ref read cannot erase that fact, and ordinary descendant adoption from an older accepted base is forbidden while it could exclude a previously committed candidate. Where ADR-017 reconciliation considered only the last accepted base revision, ADR-018 controls.
 
 ADR-019 makes destructive hosted-state rollback explicit. A rollback-independent append-only safety journal in the existing private evidence boundary preserves accepted promises, cancellation decisions, accepted canonical anchors, and publication intents across Durable Object PITR/recreation without becoming a second live state machine. It also requires immutable full-SHA pins in the retained managed private-memory Actions workflow and makes the v9 support/README migration agree with ADR-015 without silently overwriting customized support files. Where older ADR-014 through ADR-018 wording assumes forward-only Durable Object storage, ADR-019 controls recovery.
+
+ADR-020 strengthens the independent prepublication audit. Candidate validity, parent/request metadata, fresh indexes, and path scope are not enough to prove the finalizer actually applied the sealed request. Before exact `C` can be published, a fresh auditor must use Core-owned mutation semantics against exact `H0` + the immutable sealed request to prove the candidate's semantic bytes and Core mutation metadata conform to that request. This remains a second execution of the same Core semantics rather than a second semantic implementation.
 
 ## ADR format
 
