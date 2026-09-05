@@ -37,6 +37,7 @@ The architecture documents describe the target system. Accepted decisions govern
 | [ADR-020](ADR-020-independent-candidate-request-conformance.md) | Independent candidate-to-request conformance audit | Accepted |
 | [ADR-021](ADR-021-independent-terminal-success-verification.md) | Independent verification of terminal-success mutation results | Accepted |
 | [ADR-022](ADR-022-deterministic-candidate-commit-envelope.md) | Deterministic, fully audited candidate Git commit envelope | Accepted |
+| [ADR-023](ADR-023-rollback-durable-terminal-dispositions.md) | Rollback-durable terminal operation dispositions | Accepted |
 
 ADR-014 amends the initial GitHub-Actions-backed implementation profile described in ADR-012/ADR-013. Their candidate-before-canonical, independent-audit, exact-revision publication, idempotency, stale-reprepare, and per-repository serialization invariants remain accepted.
 
@@ -55,6 +56,8 @@ ADR-020 strengthens the independent prepublication audit. Candidate validity, pa
 ADR-021 closes the remaining finalizer-result bypass around ADR-020. `NO_OP` and `ALREADY_COMMITTED` are successful terminal semantic claims which can skip candidate publication, so a finalizer receipt alone cannot make them authoritative. Before either result becomes durable client-visible success or releases the lane, a fresh reduced-privilege Core/repository verification must independently prove the exact no-op or canonical committed-idempotency result and bind it in immutable rollback-recoverable terminal-success evidence. Unsuccessful/stale execution results do not require equivalent semantic replay because the architecture does not claim availability against a compromised finalizer.
 
 ADR-022 closes the remaining exact-candidate object-envelope gap. The published commit object itself is canonical state, so author/committer identity, timestamps, headers, and reachable object closure cannot remain ambient finalizer/Git inputs once ADR-020 treats the finalizer as untrusted. Hosted candidate construction now uses a deterministic Core-owned commit envelope derived from exact `H0` + sealed request + pinned release, sanitizes Git environment/config inputs, and requires the fresh auditor to prove the raw exact commit object and exact expected `C` identity. Finalizer-supplied unreachable Git objects are not part of the authorized candidate and must not be uploaded merely because they were packaged.
+
+ADR-023 generalizes rollback-safe terminalization across the entire hosted lifecycle. Any client-visible terminal result which stops an accepted operation or releases its serialized lane position must first have a minimized immutable rollback-independent terminal-disposition record. Candidate `COMMITTED`, ADR-021 `NO_OP`/`ALREADY_COMMITTED`, `NEEDS_REPREPARE`, request-local failures, deterministic terminal audit failures, and cancellation therefore cannot be forgotten by Durable Object PITR and resurrected as live work. This adds durability to unsuccessful outcomes without adding a second semantic verifier for failures.
 
 ## ADR format
 
