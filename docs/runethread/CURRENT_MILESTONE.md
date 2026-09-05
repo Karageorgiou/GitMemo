@@ -31,24 +31,29 @@ The governing architectural decisions are:
 Phase 2.6 implementation priorities are:
 
 1. define the authenticated, transport-neutral hosted delivery request/status/cancel boundary plus an explicit authorization binding between the caller and an authorized GitHub App installation/repository;
-2. implement one stateful coordinator per immutable GitHub repository identity using a Cloudflare Durable Object, with explicit lane states including `OPEN`, `SUSPENDED`, `MAINTENANCE`, and reconciliation;
-3. serialize the entire heavy finalization/audit/publication workflow per repository in v1, so queued operations made stale by a preceding hosted commit become `NEEDS_REPREPARE` before starting a Container;
-4. use one Cloudflare Workflow per admitted operation for durable, idempotent execution checkpoints/retries while keeping the Durable Object as the sole repository-lane authority;
-5. isolate the GitHub App private key in a private internal GitHub gateway/publisher Worker reached only through an internal service binding; the public API Worker and finalizer/auditor containers never receive that long-lived key;
-6. run the existing deterministic Runethread Go/Core + Git finalizer in a Cloudflare Container; a cold finalizer targets at most one GitHub source clone/fetch and a warm clone may be reused only as a disposable cache after clean exact refresh;
-7. let `ApplyMutation` perform its existing candidate construction, Index v2 write, hard validation, and local-only fast-forward exactly once rather than recreating those semantics in provider code;
-8. export exact candidate `C` plus its operation/base/runtime/contract bindings as private immutable/content-addressed candidate evidence; optimize candidate transport for total transferred work, allowing either a full package or a delta over exact `H0`;
-9. independently audit exact `C` in a fresh reduced-privilege container with hard validation, strict Index v2 freshness, candidate/request/runtime binding, and expected-diff checks, using only the minimum read-only base fetch needed to reconstruct `C` rather than enforcing an arbitrary zero-clone rule;
-10. publish only exact audited `C` through the least-privilege Runethread GitHub App and an atomic expected-old-revision compare-and-swap; prototype clone-free Git-object publication but fall back to exact candidate push if exact commit identity cannot be reproduced;
-11. after successful publication, confirm `main == C` cheaply rather than running another full synchronous clone/validation cycle;
-12. subscribe the GitHub App to signed `push` webhooks for fast canonical-movement observation while continuing to re-read exact canonical state directly for correctness at admission and publication;
-13. distinguish known queued staleness (`NEEDS_REPREPARE`) from unexpected movement during the one active hosted workflow (`RECONCILIATION_REQUIRED`);
-14. keep GitHub Free and paid private repositories on the same normal hosted mutation architecture, using paid branch/ruleset protection only as optional defense-in-depth;
-15. preserve singleton operations, exact idempotent retry, cancellation-before-publication, audit-failure suspension, and exclusive control-plane barriers;
-16. enforce explicit hosted request/repository/artifact/runtime/retry limits plus private-data/log/retention controls so quota or provider failures leave canonical Git unchanged;
-17. keep project `current-state.md`/orientation prose outside the atomic memory dual-write transaction; future refresh of those project views is a separate materialized-view/projection concern;
-18. remove push-on-every-normal-memory full GitHub Actions validation from the hosted data-plane path through the proper managed workflow/control-plane rollout, while retaining Actions where health/recovery/migration/control-plane checks prove a distinct invariant;
-19. roll the finished mechanism through the required release/downstream gates and a real private memory repository, then measure cold/warm source acquisition, bytes transferred, finalization, packaging, audit, publication, and end-to-end latency/cost separately.
+2. store sealed private request bodies as short-retention private content-addressed objects and keep only opaque references/digests in Durable Object, Workflow, log, and status state;
+3. implement one stateful coordinator per immutable GitHub repository identity using a Cloudflare Durable Object, with explicit lane states including `OPEN`, `SUSPENDED`, `MAINTENANCE`, and reconciliation;
+4. serialize the entire heavy finalization/audit/publication workflow per repository in v1, so known distinct queued stale operations become `NEEDS_REPREPARE` before starting a Container without violating Core's committed-idempotency-before-stale rule during ambiguous recovery;
+5. use a deterministic Workflow instance identity plus crash-safe get-or-create reconciliation so a crash between Durable Object state and Workflow creation cannot start duplicate heavy workflows or strand the lane;
+6. use one Cloudflare Workflow per admitted operation for durable, idempotent checkpoints/retries while keeping the Durable Object as the sole repository-lane and publication authority;
+7. isolate the GitHub App private key in a private internal GitHub gateway/publisher Worker; the baseline runtime App requests only minimum Contents/Metadata authority, not Administration or Workflows permission, and finalizer/auditor receive only narrow short-lived read tokens when required;
+8. run the existing deterministic Runethread Go/Core + Git finalizer in a Cloudflare Container; a cold finalizer targets at most one GitHub source clone/fetch and a warm clone may be reused only as an untrusted disposable cache after clean exact refresh;
+9. let `ApplyMutation` preserve its existing committed-idempotency-before-stale ordering and perform candidate construction, one Index v2 write, hard validation, and local-only fast-forward rather than recreating those semantics in provider code; transport hashes bind artifacts but do not replace Core's semantic request fingerprint;
+10. treat `NO_OP` as a Core-validated terminal outcome that skips candidate/audit/publication, not as a provider-side shortcut;
+11. export exact candidate `C` plus its operation/base/runtime/contract bindings as private content-addressed, digest-verified, no-overwrite candidate evidence; optimize transport for total transferred work, allowing either a full package or a delta over exact `H0`;
+12. independently audit exact `C` in a fresh reduced-privilege Container with hard validation, strict Index v2 freshness, candidate/request/runtime binding, and expected-diff checks, using only the minimum read-only base fetch needed to reconstruct `C`;
+13. after audit, return exact evidence to the repository Durable Object; only that lane authority may atomically transition the active operation from `AUDITED` to `PUBLISHING` after rechecking cancellation, suspension, maintenance, operation identity, and evidence binding;
+14. publish only the exact DO-authorized audited `C` through the private GitHub gateway and an atomic expected-old-revision compare-and-swap; prototype clone-free Git-object publication but fall back to exact candidate push if exact commit identity cannot be reproduced;
+15. once `PUBLISHING` wins, cancellation is no longer a correctness mechanism; resolve the exact CAS/ref outcome instead;
+16. after successful publication, confirm `main == C` cheaply rather than running another full synchronous clone/validation cycle;
+17. subscribe the GitHub App to signed `push` webhooks only for fast observation; every webhook is a hint that triggers a direct canonical-ref read, and stale/out-of-order webhook payloads never directly mutate accepted repository state;
+18. distinguish known queued staleness (`NEEDS_REPREPARE`) from unexpected movement during the one active hosted workflow (`RECONCILIATION_REQUIRED`);
+19. keep GitHub Free and paid private repositories on the same normal hosted mutation architecture, using paid branch/ruleset protection only as optional defense-in-depth;
+20. preserve singleton operations, exact idempotent retry, cancellation-before-publication, audit-failure suspension, explicit recovery, and exclusive control-plane barriers;
+21. enforce explicit hosted request/repository/artifact/runtime/retry limits plus private-data/log/retention controls so quota or provider failures leave canonical Git unchanged;
+22. keep project `current-state.md`/orientation prose outside the atomic memory dual-write transaction; future refresh of those project views is a separate materialized-view/projection concern;
+23. remove push-on-every-normal-memory full GitHub Actions validation from the hosted data-plane path through the proper managed workflow/control-plane rollout, while retaining Actions where health/recovery/migration/control-plane checks prove a distinct invariant;
+24. roll the finished mechanism through the required release/downstream gates and a real private memory repository, then measure cold/warm source acquisition, bytes transferred, finalization, packaging, audit, publication, and end-to-end latency/cost separately.
 
 ### Pre-implementation architecture-freeze gate
 
