@@ -19,6 +19,7 @@ This file is the concise current-work pointer for contributors and agents. The l
 - ADR-016 hardens the hosted trust boundary: normal hosted writes require the ADR-015 contract semantics, finalizer/auditor evidence-write capabilities are separated, live evidence cannot expire while referenced, and exact publication has a concrete minimal Git publisher executor unless a future GitHub API proves true expected-old ref CAS.
 - ADR-017 hardens reconciliation/privacy/publication lifetime: ordinary out-of-band adoption must preserve accepted Git history, private repository visibility is a live hosted-write eligibility condition, `PUBLISHING` remains fenced until issued publisher capabilities are quiesced, and the managed validation-workflow trigger change must ship through the released upgrader/downstream migration.
 - ADR-018 hardens publication-history recovery: a candidate that is proven or possibly published remains a protected history anchor until its outcome/ancestry is resolved, so a later rewrite cannot erase committed-idempotency evidence by falling back to the older accepted base.
+- ADR-019 hardens destructive hosted-state recovery and managed support: rollback-sensitive acceptance/cancellation/history/publication facts survive Durable Object rollback in a small append-only safety journal, PITR/recreation is an explicit recovery barrier, retained private-memory Actions use immutable full-SHA pins, and contract-v9 support prose is migrated without silently overwriting customized README/workflow state.
 
 ## Immediate milestone — Phase 2.6 Memory Write Delivery Pipeline
 
@@ -34,21 +35,23 @@ The governing architectural decisions are:
 - ADR-015 — project current-state documents become asynchronous orientation projections in the next operational contract;
 - ADR-016 — hosted contract eligibility, evidence capability/retention, and exact publication hardening;
 - ADR-017 — accepted-history reconciliation, repository privacy eligibility, publisher-capability fencing, and managed validation-bootstrap rollout;
-- ADR-018 — proven/possible publication-history preservation across ambiguous completion and out-of-band rewrites.
+- ADR-018 — proven/possible publication-history preservation across ambiguous completion and out-of-band rewrites;
+- ADR-019 — rollback-independent recovery evidence, restore barriers, immutable managed-workflow Action pins, and v9 managed-support authority alignment.
 
 ### Mandatory contract-v9 prerequisite
 
 The released contract v8 explicitly requires relevant project current-state synchronization when a memory materially changes present project state and treats affected current-state synchronization as part of memory-write completion. Phase 2.6 therefore MUST NOT rely on asynchronously stale project views for a contract-v8 repository.
 
-After the architecture-freeze gate passes, the **first implementation slice** is the released compatibility/migration transition implementing ADR-015 and the managed validation-bootstrap change required by ADR-017:
+After the architecture-freeze gate passes, the **first implementation slice** is the released compatibility/migration transition implementing ADR-015 plus the managed support/bootstrap changes required by ADR-017/ADR-019:
 
 1. create the next operational contract version/release (target contract v9) with the project-view completion/freshness semantics defined by ADR-015;
 2. add exact contract-v8 historical fixture/migration/compatibility/trust/bootstrap coverage;
-3. deliberately transition the Runethread-managed `.github/workflows/validate.yml` through starter/upgrader ownership logic so normal hosted canonical pushes no longer trigger redundant full validation, while exact prior managed workflow state remains a supported migration source and customized workflow state is not silently overwritten;
-4. publish and independently verify the immutable contract/runtime release anchor;
-5. migrate and permanently validate `runethread/memory-template` with the new contract and supported managed validation-bootstrap state;
-6. migrate and permanently validate the known private memory repository, preserving canonical atomic-memory identities/content/provenance/relationships and existing project-view bytes unless the reviewed contract change explicitly requires otherwise;
-7. only after a repository is explicitly migrated may hosted Phase 2.6 treat project current-state/overview prose as an asynchronously refreshed projection rather than an atomic-memory completion dependency or admit that repository to normal hosted mutation.
+3. deliberately transition the Runethread-managed `.github/workflows/validate.yml` through starter/upgrader ownership logic so normal hosted canonical pushes no longer trigger redundant full validation, every retained external `uses:` action is pinned to a verified full-length commit SHA, the exact prior managed workflow remains a supported migration source, and customized/unrecognized workflow state is not silently overwritten;
+4. update generated/current Runethread support text which still describes `projects/` current-state/overview prose as canonical, while preserving the actual user project-view bytes; automatic private-memory README replacement is limited to exact recognized prior managed README bytes/source state rather than the current broad heading/lock heuristic;
+5. publish and independently verify the immutable contract/runtime release anchor;
+6. migrate and permanently validate `runethread/memory-template` with the new contract and supported managed support/bootstrap state;
+7. migrate and permanently validate the known private memory repository, preserving canonical atomic-memory identities/content/provenance/relationships and existing project-view bytes unless the reviewed contract change explicitly requires otherwise;
+8. only after a repository is explicitly migrated may hosted Phase 2.6 treat project current-state/overview prose as an asynchronously refreshed projection rather than an atomic-memory completion dependency or admit that repository to normal hosted mutation.
 
 A contract-v8 repository continues to obey the v8 synchronization rule. Hosted delivery MUST NOT silently reinterpret v8 as v9. Under ADR-016, **normal hosted Phase 2.6 memory mutation is not admitted for contract-v8 repositories at all**. A v8 repository may be read, verified, reconciled, and upgraded, but normal hosted write admission requires the explicit projection-capable contract migration (target v9) or a later contract explicitly supported by the hosted release.
 
@@ -62,7 +65,7 @@ Phase 2.6 hosted implementation priorities after/alongside that prerequisite are
 6. implement one stateful coordinator per immutable repository identity using a Cloudflare Durable Object, with transactional SQLite for bounded queue, one active operation, phase/execution generation, retry/backoff/deadlines, evidence references, canonical-ref binding, and lane states including `OPEN`, `SUSPENDED`, `MAINTENANCE`, and reconciliation;
 7. use the DO as sole hosted lane/operation-state authority and drive the active operation through idempotent `drive()` logic plus one at-least-once alarm; explicitly reschedule prolonged retryable failures rather than relying only on finite provider alarm retries;
 8. treat DO async interleaving as real: before every Container/object-store/GitHub external action, atomically claim phase + execution generation, persist it, perform external I/O without long `blockConcurrencyWhile()`, then compare active operation/phase/generation before accepting result; stale-generation outputs never advance state;
-9. report `ACCEPTED` only after durable operation/request-reference state and a recoverable due alarm are established; exact resubmission/status/recovery repairs stored work with missing alarm;
+9. report `ACCEPTED` only after durable operation/request-reference state, a recoverable due alarm, and ADR-019 rollback-independent acceptance evidence are established; exact resubmission/status/recovery repairs stored work with missing scheduling while destructive DO rollback is handled through the recovery barrier rather than assumed forward-only;
 10. serialize the entire hosted finalization/audit/publication operation per repository in v1, but preserve ADR-003 ordering: canonical Core/Git committed-idempotency lookup happens before stale classification, so stale work stops before candidate construction/Index write/package/audit, not necessarily before cold Container/source acquisition;
 11. isolate the long-lived GitHub App private key in a private internal GitHub gateway Worker; public API has no publication binding, runtime App requests minimum Contents/Metadata authority rather than Administration/Workflows, and finalizer/auditor receive only narrow short-lived read tokens when required;
 12. run existing deterministic Runethread Go/Core + Git finalizer in repository runtime's attached Container; cold finalization targets at most one GitHub source clone/fetch and warm clone reuse is only untrusted disposable cache after exact refresh/reset to directly observed canonical ref/revision;
@@ -94,6 +97,8 @@ Phase 2.6 hosted implementation priorities after/alongside that prerequisite are
 38. transition push-on-every-normal-memory full GitHub Actions validation through the released starter/upgrader/template/private-repository managed migration, retaining Actions only for distinct health/PR/recovery/migration/control-plane checks and never hand-editing/deleting the managed workflow as part of an ordinary hosted memory operation;
 39. roll mechanism through release/downstream gates and real private memory repo, then measure cold/warm acquisition, bytes, idempotency/stale preflight, finalization, packaging, audit, publication, publisher/API-path startup/fencing, alarm/interleaving/provider startup, and end-to-end latency/cost.
 
+ADR-019 adds mandatory rollback/recreation handling around those priorities. The existing private evidence-storage boundary carries a minimized append-only repository safety journal; it is not a second queue or transition authority. Binding epochs, client-visible acceptance, cancellation wins, accepted canonical anchors, publication intents/outcomes, and required receipt references survive outside the DO PITR rollback domain. `PUBLISHING` starts no externally effective write before its publication intent is journaled. A restored/recreated DO compares its local journal checkpoint/epoch with rollback-independent evidence, enters maintenance on mismatch, fences possibly issued publication capabilities, reconstructs accepted/cancelled/protected-history state, reconciles exact Git, and repairs alarms only after safety state is re-established. Missing/corrupt required recovery evidence fails closed rather than silently creating a fresh empty runtime for an existing binding.
+
 ### Repository privacy boundary
 
 Hosted Phase 2.6 v1 supports normal writes only while the repository is directly observed as private. A GitHub `public`/repository webhook is only an early warning; current repository metadata owns the observed eligibility decision. If the repository is observed as public/internal/non-private, new normal writes and publication fail closed and require explicit revalidation before any later resume.
@@ -102,7 +107,7 @@ This does not create an impossible cross-resource guarantee. Repository visibili
 
 ### Pre-implementation architecture-freeze gate
 
-Phase 2.6 implementation code MUST NOT begin merely because ADRs are drafted or CI is green. The exact current ADR/planning state must complete a fresh adversarial architecture review covering correctness, contract compatibility, state ownership, concurrency/interleaving, crash/retry behavior, privilege boundaries, evidence authority/retention, publisher capability lifetime, exact remote publication, accepted-history reconciliation, indeterminate publication history, repository visibility/privacy, deployment/version skew, resource limits, canonical-ref behavior, managed bootstrap rollout, and avoidable latency/duplication.
+Phase 2.6 implementation code MUST NOT begin merely because ADRs are drafted or CI is green. The exact current ADR/planning state must complete a fresh adversarial architecture review covering correctness, contract compatibility, state ownership, concurrency/interleaving, crash/retry behavior, destructive control-plane rollback/recreation, privilege boundaries, evidence authority/retention, publisher capability lifetime, exact remote publication, accepted-history reconciliation, indeterminate publication history, repository visibility/privacy, deployment/version skew, resource limits, canonical-ref behavior, managed bootstrap/support migration, workflow supply-chain immutability, and avoidable latency/duplication.
 
 The review passes only when it produces **zero required architecture or planning edits**. Any material correction, simplification, missing invariant, contract prerequisite, or changed implementation boundary is recorded first and resets the gate; the full review then repeats against the new exact head.
 
@@ -110,7 +115,9 @@ The attack review completed on 2026-09-05 against pre-amendment head `68549677e0
 
 The next full attack review, explicitly started against synchronized head `0a1ea0b871105d6497754fbbee93a387cb2494b4`, also found material required edits and produced ADR-017. That review also failed the zero-edit gate.
 
-The following full attack review, explicitly started against synchronized head `a9e6db2f72c8d450753c5e70e4eea5eea2d78565`, found the indeterminate-publication/history-erasure race recorded in ADR-018. **That review therefore also fails the zero-edit gate and cannot unlock implementation.** No additional attack run is started in the same prompt after these edits. A later implementation-unlocking review must start from the new exact synchronized head and itself require zero edits.
+The following full attack review, explicitly started against synchronized head `a9e6db2f72c8d450753c5e70e4eea5eea2d78565`, found the indeterminate-publication/history-erasure race recorded in ADR-018. That review also failed the zero-edit gate.
+
+The current full attack review, explicitly started against synchronized head `0f7f95c8220d16121144de5d1c1a4f42978550bd`, found destructive Durable Object rollback/recreation, managed private-workflow Action pinning, and v9 managed-support authority-alignment gaps and produced ADR-019. **This review therefore also fails the zero-edit gate and cannot unlock implementation.** No additional attack run is started in the same prompt after these edits. A later implementation-unlocking review must start from the new exact synchronized planning head and itself require zero edits.
 
 Prototype questions may remain only when accepted ADRs already provide a safe invariant-preserving fallback and architecture does not depend on guessing the result. Current GitHub GraphQL documentation exposes an expected-old `beforeOid` ref update, so the delegated clone-free publication prototype should test exact candidate-object identity and App-permission behavior before building unnecessary publisher machinery; the accepted Git-protocol publisher remains the safe fallback until that proof exists.
 
@@ -138,3 +145,4 @@ All substantive changes follow `docs/runethread/ENGINEERING_PROCESS.md` and `doc
 - ADR-016 amends Phase 2.6 hosted admission/evidence/publication details without changing Core memory semantics or GitHub canonical-state ownership.
 - ADR-017 amends Phase 2.6 reconciliation/privacy/publication-capability/managed-bootstrap details without introducing a second semantic owner.
 - ADR-018 amends Phase 2.6 publication/reconciliation recovery so proven or possibly published candidate history cannot be forgotten by a later out-of-band ref rewrite.
+- ADR-019 amends Phase 2.6 recovery/bootstrap details so destructive DO rollback cannot erase externally relevant safety facts, retained private-memory Actions use immutable pins, and v9 support prose/migration agrees with the non-authoritative project-view model.
