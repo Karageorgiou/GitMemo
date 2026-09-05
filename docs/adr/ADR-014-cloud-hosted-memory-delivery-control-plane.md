@@ -133,9 +133,11 @@ The API accepts one complete sealed MemoryService-compatible operation or a supp
 
 Phase 2.6 v1 permits concurrent semantic preparation but serializes the **whole heavy finalization/audit/publication workflow per repository**. Different repositories execute independently.
 
-After a known hosted commit advances canonical state, queued operations whose expected revision is now stale may be parked before Container startup **only when hosted state already proves they are distinct operations and not an ambiguous lost-response retry**. The optimization MUST NOT replace ADR-003's ordering rule.
+Serialization is an availability/cost optimization layered on top of Core correctness; it does **not** authorize the hosted coordinator to classify a stale expected revision before the canonical committed-idempotency rule has been satisfied.
 
-When hosted state is absent, inconsistent, recovered, or otherwise unable to prove that distinction, exact canonical committed idempotency evidence is checked before classifying an expected-revision mismatch as `NEEDS_REPREPARE`. Core's `FindAppliedOperation`/request-fingerprint semantics remain authoritative for committed retry/conflict determination.
+An operation whose `expected_revision` no longer equals current canonical state still passes through a canonical idempotency preflight using Core/Git evidence. `FindAppliedOperation`/Core request-fingerprint behavior remains authoritative and occurs before stale classification, exactly as required by ADR-003. If the key is already committed, Core returns the committed outcome/conflict semantics; only an uncommitted operation becomes `NEEDS_REPREPARE`.
+
+Therefore Phase 2.6 does not promise that every known-stale queued operation can be rejected before cold Container/source acquisition. Without a provably complete canonical idempotency index, doing so would be unsafe for old committed retries. The guaranteed optimization boundary is **before semantic candidate construction, Index v2 write, candidate packaging, and audit**. A warm runtime or future lightweight Core/Git preflight may make this cheaper, but correctness does not depend on it.
 
 `NO_OP` is a successful terminal result with no candidate/audit/publication, but it still passes through Core's ordinary request validation, committed-idempotency lookup, repository revision check, and hard repository validation. The coordinator MUST NOT infer semantic `NO_OP` solely from the operation label.
 
@@ -185,9 +187,11 @@ For a cold executor, the target is at most one GitHub source clone/fetch for fin
 
 A warm clone MAY be reused only as an untrusted cache after exact fetch and hard restoration to the direct remote canonical revision. Correctness never depends on warm disk. Repository-controlled Git hooks, submodules, external filters, credential helpers, unsafe config/includes, and related execution surfaces must be disabled/refused under an explicit hosted Git hardening policy.
 
-A **fresh finalization attempt always begins from the directly observed remote canonical state**, never from a local branch that may contain an earlier unpromoted candidate. Before invoking Core, the hosted wrapper hard-resets/reconstructs the working clone to the exact authorized remote `H0` and verifies cleanliness/branch/revision.
+A **fresh finalization invocation always begins from the directly observed remote canonical state**, never from a local branch that may contain an earlier unpromoted candidate. Before invoking Core, the hosted wrapper hard-resets/reconstructs the working clone to the exact authorized remote revision and verifies cleanliness/branch/revision.
 
 This is required because `ApplyMutation` locally fast-forwards the clone to candidate `C`; that local candidate contains Runethread operation metadata even though remote GitHub `main` has not committed it. A retry MUST NOT search that unpromoted local history and misclassify it as `ALREADY_COMMITTED`.
+
+Core itself then performs the canonical committed-idempotency lookup before stale expected-revision classification. If uncommitted and stale, finalization ends before mutation/index/audit work.
 
 ### Idempotent finalization receipt protocol
 
@@ -197,11 +201,13 @@ Before doing semantic work, the finalizer checks a deterministic immutable **fin
 
 If no receipt exists:
 
-1. refresh/reset the clone to direct remote canonical `H0`;
+1. refresh/reset the clone to direct remote canonical state;
 2. invoke `ApplyMutation` once, preserving Core's committed-idempotency-before-stale behavior against canonical remote history;
 3. for non-noop success, persist complete exact candidate evidence/package first;
 4. create the immutable attempt-bound finalization receipt **last**, with create-if-absent semantics, binding exact `H0`, `C`, request digest, candidate package digest/reference, Core request fingerprint/metadata, and runtime/delivery identity;
 5. only after the receipt is durably readable/verified may the Workflow finalization step report `CANDIDATE_READY`.
+
+The receipt's conditional create is the linearization point for the authoritative candidate of that hosted attempt. If overlapping/retried finalizers somehow produce different candidates before the receipt exists, only one receipt may win. A loser MUST discard its own unreceipted candidate, read/verify the winning receipt, and return that exact candidate identity; it cannot overwrite the receipt or continue with its losing candidate.
 
 If the process crashes after local `ApplyMutation` but before receipt creation, a retry discards/resets any surviving local candidate and starts again from remote canonical state. A newly generated candidate may differ and must receive its own package before the one attempt receipt is created. Orphan candidate packages without a finalization receipt are nonauthoritative and may be garbage-collected.
 
@@ -210,6 +216,16 @@ If a finalization receipt exists but its referenced candidate evidence is missin
 `ALREADY_COMMITTED` is returned only from canonical Git evidence (or trusted hosted terminal state already reconciled to that canonical evidence), never merely because an unpromoted local clone contains the operation commit.
 
 For `NO_OP`, Core returns no candidate. The hosted operation may persist a small terminal hosted receipt/status for response recovery, but no Git commit is invented; if hosted no-op state is later lost, Core re-evaluates the request against the then-current expected revision rather than pretending Git contains committed no-op evidence.
+
+### Finalization failure classification
+
+Hosted error handling distinguishes operation-local failures from repository-integrity/control-plane failures.
+
+- an invalid proposed mutation or post-write validation failure that leaves canonical `H0` valid is operation-local (`FINALIZATION_FAILED` or equivalent) and need not suspend unrelated later operations;
+- failure to verify/validate the **canonical pre-mutation repository**, trust/lock, supported contract/repository state, or another invariant indicating the accepted canonical base itself is unhealthy drives the lane to `SUSPENDED`/`RECONCILIATION_REQUIRED` rather than repeatedly treating each request as an independent mutation failure;
+- disposable-cache dirtiness or provider/network errors are repaired/retried as execution failures and do not redefine canonical health.
+
+Core error/result codes and exact validation evidence remain the basis for this classification; provider glue does not reinterpret semantic validation rules.
 
 ### Candidate evidence and transport
 
@@ -301,7 +317,7 @@ Correctness therefore remains safe under duplicate, delayed, reordered, or misse
 
 ### Out-of-band movement and reconciliation
 
-Before heavy execution and again at publication, hosted Runethread compares direct observed canonical state to accepted/expected state. Unexpected movement not explained by the one active hosted workflow or authorized maintenance/recovery yields `RECONCILIATION_REQUIRED`.
+Before heavy semantic candidate construction and again at publication, hosted Runethread compares direct observed canonical state to accepted/expected state. Unexpected movement not explained by the one active hosted workflow or authorized maintenance/recovery yields `RECONCILIATION_REQUIRED`.
 
 Recovery independently inspects the exact out-of-band revision and either adopts it after applicable trust/validation/index/repository-health checks establish a new accepted canonical base, or repairs/restores through an explicit authorized recovery procedure. Owner permission alone does not make arbitrary movement audited.
 
@@ -336,8 +352,10 @@ Phase 2.6 establishes provider-neutral hosted delivery operations before MCP tra
 - Deterministic hosted attempt/Workflow identity makes DO/Workflow startup recoverable without aliasing byte-different requests sharing one Core idempotency key.
 - Workflow/DO state stores opaque request/evidence references, not private memory bodies.
 - Existing MemoryService remains the single mutation engine and preserves ADR-003 idempotency-before-stale semantics.
+- Hosted serialization avoids duplicate heavy work, but stale classification still waits for canonical committed-idempotency preflight; the guaranteed savings are candidate/index/package/audit work, not every cold Container startup.
 - The hosted finalization receipt prevents an unpromoted local candidate from being mistaken for canonical `already_applied` state after a lost finalizer response.
-- Heavy workflow serialization rejects known-stale queued work before expensive execution without misclassifying ambiguous exact retries.
+- Receipt conditional creation linearizes the one authoritative candidate when overlapping finalizer retries occur.
+- Canonical precondition/trust failure suspends the lane instead of being treated as an ordinary request-local mutation failure.
 - Fresh audit remains a distinct trust boundary.
 - The DO, not Workflow/auditor/public API, authorizes the publication critical section and defines cancellation ordering.
 - Long-lived GitHub App authority is isolated; baseline App permissions exclude Administration/Workflows.
@@ -364,6 +382,9 @@ Rejected: canonical publisher authority belongs behind a private internal capabi
 
 ### Rewrite MemoryService for Workers
 Rejected: it creates a second mutation engine solely to avoid Containers.
+
+### Add a hosted complete idempotency database solely to reject stale work before source acquisition
+Rejected: Git history/Core remains canonical committed-idempotency authority. Duplicating all historical operation identity merely to avoid a possible cold clone adds a second recovery authority and complexity disproportionate to the optimization.
 
 ### Use persistent cloud Git as canonical
 Rejected: the user-owned Git repository remains canonical.
@@ -408,33 +429,36 @@ Implementation evidence must demonstrate at least:
 7. hosted attempt identity binds repository + Core idempotency + sealed-request digest so byte-different envelopes cannot alias one Workflow accidentally;
 8. deterministic Workflow IDs plus get-or-create reconciliation survive crashes before/after Workflow creation without duplicate heavy workflows or phantom lane release;
 9. callback loss/provider retention expiry cannot release the lane without Workflow/receipt/Git reconciliation;
-10. known distinct stale queued work is parked before Container startup, while ambiguous recovery checks canonical committed idempotency before stale;
-11. provider transport digests do not replace Core's semantic idempotency fingerprint/conflict rules;
-12. `NO_OP` still executes Core's request/revision/idempotency/repository validation but skips candidate/audit/publication;
-13. a cold finalizer performs no more than one source clone/fetch and preserves historical canonical idempotency evidence;
-14. warm clone reuse and Git execution are hardened against dirty/stale/repository-controlled execution surfaces;
-15. every fresh finalization invocation starts from direct remote canonical H0, not surviving unpromoted local candidate history;
-16. after `ApplyMutation`, candidate evidence is persisted and an immutable finalization receipt is created last before the Workflow step can report success;
-17. a lost finalizer response with surviving local C cannot produce false `ALREADY_COMMITTED`; retry either uses the valid receipt or resets to remote canonical state and re-finalizes;
-18. receipt/evidence mismatch or missing evidence fails closed rather than silently regenerating under the old receipt;
-19. `ApplyMutation` constructs exact `C`, writes Index v2 once, hard-validates, and leaves remote `main` at `H0`;
-20. private request/candidate/receipt objects are digest-verified, no-overwrite, short-retention, and absent from ordinary Workflow/DO/log/client plaintext;
-21. candidate packaging is complete under the selected clone mode and cannot omit required promisor objects;
-22. a fresh auditor verifies exact `C`, hard validation, strict Index v2 freshness, and scope without repair/publication authority;
-23. deterministic audit failure leaves Git canonical state unchanged and cannot release the lane without durable suspension/reconciliation;
-24. after audit, only the DO can transition `AUDITED -> PUBLISHING`, and cancellation/maintenance/suspension races are resolved before publisher authority is granted;
-25. publisher requests are exact-repository/attempt/idempotency/audit-bound and publication requires remote `main == H0` before moving only to audited `C`;
-26. duplicate publisher calls and CAS response loss are resolved from exact ref/evidence without duplicate semantic mutation;
-27. clone-free Git-object publication is used only if exact object identity is proven; otherwise exact-candidate push fallback works;
-28. successful publication gets only cheap exact-ref confirmation in the normal synchronous path;
-29. duplicate/delayed/out-of-order/missed signed webhooks remain safe because they trigger direct ref reconciliation rather than directly mutating accepted state;
-30. unexpected/out-of-band movement enters reconciliation before later hosted writes;
-31. App uninstall/repository removal/permission loss fails closed and requires authorization revalidation;
-32. control-plane barriers prevent pre-barrier work from publishing under changed semantics;
-33. non-atomic Worker/Workflow/Container deployment cannot mix incompatible semantics inside one operation;
-34. resource/quota/provider failures preserve canonical Git state and are distinguishable from deterministic failures;
-35. project orientation files are not silently dual-written by hosted provider code;
-36. local/offline MemoryService remains usable without Cloudflare and Core imports no hosted provider dependencies;
-37. push-on-every-normal-memory GitHub Actions validation is removed through proper managed rollout while distinct recovery/migration/health checks remain possible;
-38. Phase 3 MCP can expose the same delivery lifecycle without changing canonical memory format or mutation semantics;
-39. end-to-end measurements separate cold/warm source acquisition, bytes transferred, finalization, packaging, audit, publication, and provider startup so optimization is evidence-driven.
+10. any stale classification that could overlap a committed retry runs canonical Core/Git idempotency lookup first; no incomplete hosted cache can override ADR-003;
+11. stale uncommitted work stops before candidate construction/Index write/package/audit even when cold source acquisition was required to prove it;
+12. provider transport digests do not replace Core's semantic idempotency fingerprint/conflict rules;
+13. `NO_OP` still executes Core's request/revision/idempotency/repository validation but skips candidate/audit/publication;
+14. a cold finalizer performs no more than one source clone/fetch and preserves historical canonical idempotency evidence;
+15. warm clone reuse and Git execution are hardened against dirty/stale/repository-controlled execution surfaces;
+16. every fresh finalization invocation starts from direct remote canonical state, not surviving unpromoted local candidate history;
+17. after `ApplyMutation`, candidate evidence is persisted and an immutable finalization receipt is created last before the Workflow step can report success;
+18. concurrent/overlapping finalizer retries cannot select two authoritative candidates: conditional receipt creation chooses one winner and losers return/discard accordingly;
+19. a lost finalizer response with surviving local C cannot produce false `ALREADY_COMMITTED`; retry either uses the valid receipt or resets to remote canonical state and re-finalizes;
+20. receipt/evidence mismatch or missing evidence fails closed rather than silently regenerating under the old receipt;
+21. `ApplyMutation` constructs exact `C`, writes Index v2 once, hard-validates, and leaves remote `main` at `H0`;
+22. canonical pre-mutation trust/validation/compatibility failure suspends/reconciles the repository, while request-local proposed-mutation failure does not unnecessarily block unrelated later work;
+23. private request/candidate/receipt objects are digest-verified, no-overwrite, short-retention, and absent from ordinary Workflow/DO/log/client plaintext;
+24. candidate packaging is complete under the selected clone mode and cannot omit required promisor objects;
+25. a fresh auditor verifies exact `C`, hard validation, strict Index v2 freshness, and scope without repair/publication authority;
+26. deterministic audit failure leaves Git canonical state unchanged and cannot release the lane without durable suspension/reconciliation;
+27. after audit, only the DO can transition `AUDITED -> PUBLISHING`, and cancellation/maintenance/suspension races are resolved before publisher authority is granted;
+28. publisher requests are exact-repository/attempt/idempotency/audit-bound and publication requires remote `main == H0` before moving only to audited `C`;
+29. duplicate publisher calls and CAS response loss are resolved from exact ref/evidence without duplicate semantic mutation;
+30. clone-free Git-object publication is used only if exact object identity is proven; otherwise exact-candidate push fallback works;
+31. successful publication gets only cheap exact-ref confirmation in the normal synchronous path;
+32. duplicate/delayed/out-of-order/missed signed webhooks remain safe because they trigger direct ref reconciliation rather than directly mutating accepted state;
+33. unexpected/out-of-band movement enters reconciliation before later hosted writes;
+34. App uninstall/repository removal/permission loss fails closed and requires authorization revalidation;
+35. control-plane barriers prevent pre-barrier work from publishing under changed semantics;
+36. non-atomic Worker/Workflow/Container deployment cannot mix incompatible semantics inside one operation;
+37. resource/quota/provider failures preserve canonical Git state and are distinguishable from deterministic failures;
+38. project orientation files are not silently dual-written by hosted provider code;
+39. local/offline MemoryService remains usable without Cloudflare and Core imports no hosted provider dependencies;
+40. push-on-every-normal-memory GitHub Actions validation is removed through proper managed rollout while distinct recovery/migration/health checks remain possible;
+41. Phase 3 MCP can expose the same delivery lifecycle without changing canonical memory format or mutation semantics;
+42. end-to-end measurements separate cold/warm source acquisition, bytes transferred, finalization, packaging, audit, publication, and provider startup so optimization is evidence-driven.
